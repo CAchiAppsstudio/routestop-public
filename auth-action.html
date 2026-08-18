@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; object-src 'none'">
+    <title>RouteStop - Confirmation</title>
+    <style>
+      :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #201650; background: #f8f4ff; }
+      main { width: min(100%, 520px); padding: 32px; border: 1px solid #e1d2ff; border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: 0 18px 54px rgba(74,34,146,.14); }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; font-size: 23px; font-weight: 800; }
+      .mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; color: #fff; background: linear-gradient(145deg,#2d176d,#7c2be0 62%,#ea3d9c); }
+      .mark span { display: block; transform: rotate(-38deg); font-size: 25px; }
+      h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.2; }
+      p { margin: 0 0 24px; color: #625981; font-size: 16px; line-height: 1.55; }
+      a { min-height: 52px; display: flex; align-items: center; justify-content: center; padding: 12px 20px; border-radius: 13px; color: #fff; background: linear-gradient(120deg,#2b1a69,#7b26dc,#e63a99); text-decoration: none; font-size: 16px; font-weight: 750; }
+      a[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+      .note { margin: 18px 0 0; color: #8b83a2; font-size: 13px; text-align: center; }
+      @media (prefers-color-scheme: dark) {
+        body { color: #f7f2ff; background: #0e0a20; }
+        main { border-color: #49377e; background: rgba(25,18,52,.96); box-shadow: 0 18px 54px rgba(0,0,0,.32); }
+        p { color: #c1b6df; }
+        .note { color: #998eb7; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span class="mark" aria-hidden="true"><span>➤</span></span>RouteStop</div>
+      <h1 id="title">Vérification en cours</h1>
+      <p id="description">Nous vérifions que ce lien provient bien de RouteStop.</p>
+      <a id="continue" aria-disabled="true">Continuer</a>
+      <p class="note" id="note">Cette page n’effectue aucune action sans votre confirmation.</p>
+    </main>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const english = params.get('lang') === 'en';
+        const recovery = params.get('mode') === 'recovery';
+        const title = document.getElementById('title');
+        const description = document.getElementById('description');
+        const button = document.getElementById('continue');
+        const note = document.getElementById('note');
+
+        const copy = english
+          ? {
+              title: recovery ? 'Reset your password' : 'Confirm your account',
+              description: recovery
+                ? 'Continue to RouteStop to choose a new password.'
+                : 'Continue to RouteStop to confirm your email address.',
+              button: recovery ? 'Open RouteStop' : 'Confirm my account',
+              note: 'Nothing happens until you press the button.',
+              invalidTitle: 'Invalid or expired link',
+              invalidDescription: 'Request a new email from the RouteStop app.',
+            }
+          : {
+              title: recovery ? 'Réinitialisez votre mot de passe' : 'Confirmez votre compte',
+              description: recovery
+                ? 'Continuez vers RouteStop pour choisir un nouveau mot de passe.'
+                : 'Continuez vers RouteStop pour confirmer votre adresse email.',
+              button: recovery ? 'Ouvrir RouteStop' : 'Confirmer mon compte',
+              note: 'Aucune action n’est effectuée avant votre clic.',
+              invalidTitle: 'Lien invalide ou expiré',
+              invalidDescription: 'Demandez un nouvel email depuis l’application RouteStop.',
+            };
+
+        document.documentElement.lang = english ? 'en' : 'fr';
+        title.textContent = copy.title;
+        description.textContent = copy.description;
+        button.textContent = copy.button;
+        note.textContent = copy.note;
+
+        try {
+          const action = new URL(params.get('confirmation_url') || '');
+          const actionType = action.searchParams.get('type');
+          const redirect = new URL(action.searchParams.get('redirect_to') || '');
+          const validType = recovery
+            ? actionType === 'recovery'
+            : actionType === 'signup' || actionType === 'email';
+          const validAction = action.protocol === 'https:'
+            && action.hostname === 'ubvvtmrnczqgoiavijfp.supabase.co'
+            && action.pathname === '/auth/v1/verify'
+            && validType;
+          const validRedirect = redirect.protocol === 'routestop:' && redirect.hostname === 'auth';
+
+          if (!validAction || !validRedirect) throw new Error('invalid_auth_action');
+          button.href = action.toString();
+          button.removeAttribute('aria-disabled');
+        } catch {
+          title.textContent = copy.invalidTitle;
+          description.textContent = copy.invalidDescription;
+          button.hidden = true;
+          note.hidden = true;
+        }
+      })();
+    </script>
+  </body>
+</html>
