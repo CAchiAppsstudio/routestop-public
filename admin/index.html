@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex,nofollow,noarchive" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co wss://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    />
+    <title>RouteStop Admin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="../assets/icon.png" alt="" />
+        <div>
+          <p class="eyebrow">Back-office</p>
+          <h1>RouteStop Admin</h1>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span id="admin-state" class="pill muted">Non connecté</span>
+        <button id="logout-btn" class="ghost hidden" type="button">Déconnexion</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section id="setup-panel" class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Configuration</p>
+            <h2>Supabase</h2>
+          </div>
+          <span class="pill">Local</span>
+        </div>
+        <form id="config-form" class="form">
+          <label>
+            URL du projet
+            <input id="supabase-url" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+          </label>
+          <label>
+            Anon key
+            <input id="supabase-key" type="password" placeholder="eyJ..." autocomplete="new-password" />
+          </label>
+          <button type="submit">Enregistrer</button>
+          <p id="config-state" class="hint"></p>
+        </form>
+      </section>
+
+      <section id="auth-panel" class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Connexion</p>
+            <h2>Compte admin</h2>
+          </div>
+          <span class="pill warning">Compte requis</span>
+        </div>
+        <form id="auth-form" class="form">
+          <label>
+            Email
+            <input id="email" type="email" autocomplete="email" />
+          </label>
+          <label>
+            Mot de passe
+            <input id="password" type="password" autocomplete="current-password" />
+          </label>
+          <button type="submit">Se connecter</button>
+          <p id="auth-state" class="hint"></p>
+        </form>
+      </section>
+
+      <section id="denied-panel" class="panel hidden wide">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Accès refusé</p>
+            <h2>Ce compte n’est pas admin</h2>
+          </div>
+          <span class="pill danger">Bloqué</span>
+        </div>
+        <p class="body-copy">Ajoute cet utilisateur dans <code>public.admin_users</code> depuis Supabase SQL Editor.</p>
+        <pre id="admin-sql" class="sql"></pre>
+      </section>
+
+      <section id="app-shell" class="admin-shell hidden wide">
+        <aside class="sidebar">
+          <button class="nav active" data-view="dashboard" type="button">Dashboard</button>
+          <button class="nav" data-view="reports" type="button">Signalements</button>
+          <button class="nav" data-view="data" type="button">Données</button>
+          <button class="nav" data-view="automation" type="button">Automatisation</button>
+          <button class="nav" data-view="analytics" type="button">Analytics</button>
+          <button id="refresh-btn" class="ghost" type="button">Actualiser</button>
+        </aside>
+
+        <section class="workspace">
+          <div class="workspace-head">
+            <div>
+              <p class="eyebrow" id="view-eyebrow">Vue globale</p>
+              <h2 id="view-title">Dashboard</h2>
+            </div>
+            <p id="admin-feedback" class="hint"></p>
+          </div>
+
+          <section id="dashboard-view" class="view"></section>
+
+          <section id="reports-view" class="view hidden">
+            <div class="toolbar">
+              <div class="segmented" id="status-tabs">
+                <button class="active" data-status="pending" type="button">À traiter</button>
+                <button data-status="reviewed" type="button">Traités</button>
+                <button data-status="rejected" type="button">Rejetés</button>
+                <button data-status="all" type="button">Tous</button>
+              </div>
+              <input id="search" class="search" type="search" placeholder="Aire, enseigne, détail..." />
+            </div>
+            <div id="reports-list" class="stack"></div>
+          </section>
+
+          <section id="data-view" class="view hidden"></section>
+          <section id="automation-view" class="view hidden"></section>
+          <section id="analytics-view" class="view hidden"></section>
+        </section>
+      </section>
+    </main>
+
+    <script src="./config.js"></script>
+    <script src="./vendor/supabase-js-2.105.1.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
