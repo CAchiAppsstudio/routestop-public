@@ -33,7 +33,7 @@
         Cette page explique simplement quelles données RouteStop utilise, pourquoi,
         avec qui elles sont traitées et comment garder le contrôle.
       </p>
-      <p class="meta">Version en vigueur : 30 juillet 2026</p>
+      <p class="meta">Version en vigueur : 18 août 2026</p>
     </section>
   </header>
 
@@ -83,7 +83,11 @@
         <h3>Compte RouteStop</h3>
         <ul>
           <li>adresse e-mail et identifiant technique Supabase ;</li>
-          <li>mode de connexion, notamment Apple lorsque vous le choisissez ;</li>
+          <li>
+            mode de connexion et, si vous choisissez Apple ou Google, les informations
+            de profil de base transmises par ce fournisseur (identifiant, adresse e-mail,
+            nom et image de profil lorsqu’ils sont disponibles) ;
+          </li>
           <li>carburant, enseignes et restaurants préférés ;</li>
           <li>aires favorites, notes et évaluations ;</li>
           <li>signalements et informations nécessaires à leur vérification.</li>
@@ -146,6 +150,11 @@
           <li><strong>Supabase</strong>, pour l’authentification et la base de données hébergée dans l’Union européenne ;</li>
           <li><strong>Expo/EAS</strong>, pour distribuer les builds et mises à jour de l’application ;</li>
           <li><strong>Apple</strong>, si vous choisissez « Continuer avec Apple » ;</li>
+          <li>
+            <strong>Google</strong>, si vous choisissez « Continuer avec Google » ;
+            RouteStop demande uniquement votre identité de base et n’accède ni à Gmail,
+            ni à Drive, ni à vos contacts ;
+          </li>
           <li><strong>IGN Géoplateforme</strong>, ainsi qu’<strong>OpenStreetMap/Nominatim</strong> uniquement en secours, pour rechercher une adresse ou un lieu ;</li>
           <li><strong>OSRM</strong>, pour calculer l’itinéraire demandé ;</li>
           <li><strong>CARTO</strong>, pour les fonds de carte, et Google pour certains visuels d’enseignes ;</li>
