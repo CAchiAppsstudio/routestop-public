@@ -928,6 +928,14 @@ a.chip {
   align-items: center;
 }
 
+.sync-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .automation-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

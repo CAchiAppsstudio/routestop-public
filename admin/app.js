@@ -6,6 +6,22 @@
     'south_1', 'south_2', 'south_3', 'south_4',
   ]);
   const OSM_SYNC_REGION_COUNT = OSM_SYNC_REGIONS.size;
+  const OSM_REGION_LABELS = {
+    north_1: 'Bretagne ouest',
+    north_2: 'Bretagne est et Normandie',
+    north_3a: 'Région parisienne ouest',
+    north_3b: 'Région parisienne est et Champagne',
+    north_4: 'Nord-Est',
+    north_5: 'Alsace',
+    center_1: 'Centre-Ouest',
+    center_2: 'Centre',
+    center_3: 'Centre-Est',
+    center_4: 'Alpes du Nord',
+    south_1: 'Sud-Ouest',
+    south_2: 'Languedoc',
+    south_3: 'Sud-Est',
+    south_4: 'Corse et frontière italienne',
+  };
 
   const typeLabels = {
     brand_closed: 'Enseigne fermée',
@@ -24,11 +40,11 @@
   };
 
   const viewTitles = {
-    dashboard: ['Vue globale', 'Dashboard'],
+    dashboard: ['Vue globale', 'Accueil'],
     reports: ['Modération', 'Signalements'],
     data: ['Base applicative', 'Corrections actives'],
-    automation: ['Pilotage', 'Automatisation'],
-    analytics: ['Monétisation', 'Analytics usage'],
+    automation: ['Contrôle', 'Mises à jour'],
+    analytics: ['Monétisation', 'Statistiques d’utilisation'],
   };
 
   let client = null;
@@ -57,6 +73,37 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function syncStatusLabel(status) {
+    if (status === 'success') return 'Réussi';
+    if (status === 'error') return 'À relancer';
+    return 'Inconnu';
+  }
+
+  function syncSourceLabel(source) {
+    if (source === 'fuel_prices_gov') return 'Prix carburant';
+    if (source === 'service_areas_operator') return 'Liste officielle des aires';
+    if (source === 'service_areas_osm') return 'Restaurants et services';
+    return 'Mise à jour des données';
+  }
+
+  function regionLabel(region) {
+    return OSM_REGION_LABELS[region] || 'Zone autoroutière';
+  }
+
+  function friendlySyncError(message) {
+    const value = String(message || '').toLowerCase();
+    if (/timeout|timed out|aborted|http 504|http 502|http 503/.test(value)) {
+      return 'La source publique n’a pas répondu à temps. Les données précédentes restent disponibles.';
+    }
+    if (/no_motorway_geometry/.test(value)) {
+      return 'Aucune autoroute reconnue dans cette zone.';
+    }
+    if (/no_osm_service_areas|no_osm_details/.test(value)) {
+      return 'Aucune aire n’a pu être confirmée pendant ce passage. Les données précédentes restent disponibles.';
+    }
+    return 'La mise à jour n’a pas abouti. Les données précédentes restent disponibles.';
   }
 
   function readConfig() {
@@ -294,7 +341,7 @@
     syncRuns = syncRunsData;
     fuelPrices = fuelPricesData;
     serviceAreas = serviceAreasData;
-    showFeedback(`Dernière synchro ${formatDate(new Date().toISOString())}`);
+    showFeedback(`Données vérifiées ${formatDate(new Date().toISOString())}`);
     renderAll();
   }
 
@@ -315,6 +362,7 @@
     const database = operations.database || {};
     const emails = operations.emails || {};
     const automation = operations.automation || {};
+    const syncProblems = buildAutomationAlerts().filter((alert) => alert.category === 'sync').length;
     const limits = monitoringLimits();
     const mauPercent = percent(users.signedIn30d || 0, limits.monthlyActiveUsers);
     const databasePercent = percent(database.bytes || 0, limits.databaseBytes);
@@ -327,7 +375,7 @@
       <section class="ops-hero ${escapeHtml(health.tone)}">
         <div class="ops-status-icon"><span></span></div>
         <div class="ops-hero-copy">
-          <p class="eyebrow">Supervision V1</p>
+          <p class="eyebrow">État de RouteStop</p>
           <h3>${escapeHtml(health.title)}</h3>
           <p>${escapeHtml(health.text)}</p>
         </div>
@@ -341,7 +389,7 @@
         ${opsCard('Comptes inscrits', users.total ?? stats.users ?? profiles.length, `+${users.new7d || 0} sur 7 jours`, 'users')}
         ${opsCard('Actifs dans l’app', activity.activeUsers7d ?? '-', `${activity.activeUsers24h || 0} sur 24 h`, 'activity')}
         ${opsCard('E-mails envoyés', emails.sent7d ?? '-', `${emails.failed7d || 0} échec sur 7 jours`, emails.failed7d ? 'warning' : 'email')}
-        ${opsCard('Automatisations', `${automation.cronActive ?? '-'}/${automation.cronTotal ?? '-'}`, `${automation.syncFailures24h || 0} échec sur 24 h`, automation.syncFailures24h ? 'warning' : 'success')}
+        ${opsCard('Mises à jour prévues', `${automation.cronActive ?? '-'}/${automation.cronTotal ?? '-'}`, syncProblems ? `${syncProblems} problème(s) actif(s)` : 'Aucun problème actif', syncProblems ? 'warning' : 'success')}
       </div>
 
       <div class="monitoring-grid">
@@ -352,7 +400,7 @@
           </div>
           ${quotaRow('Connexions mensuelles', users.signedIn30d || 0, limits.monthlyActiveUsers, mauPercent, 'approximation du quota MAU')}
           ${quotaRow('Taille de la base', formatBytes(database.bytes || 0), formatBytes(limits.databaseBytes), databasePercent, `${database.fuelPriceRows || 0} prix · ${database.serviceAreaRows || 0} aires`)}
-          ${quotaRow('Connexions PostgreSQL', database.connections || 0, database.maxConnections || '-', Number(database.connectionPercent) || 0, 'connexions ouvertes maintenant')}
+          ${quotaRow('Connexions à la base', database.connections || 0, database.maxConnections || '-', Number(database.connectionPercent) || 0, 'connexions ouvertes maintenant')}
         </article>
 
         <article class="panel inner health-panel">
@@ -378,8 +426,8 @@
       <div class="dashboard-grid">
         <article class="panel inner">
           <div class="panel-head compact">
-            <div><p class="eyebrow">Automatisation</p><h3>À surveiller maintenant</h3></div>
-            <button class="ghost" data-action="focus-automation" type="button">Piloter</button>
+            <div><p class="eyebrow">Données</p><h3>À surveiller maintenant</h3></div>
+            <button class="ghost" data-action="focus-automation" type="button">Gérer</button>
           </div>
           ${alerts.length ? alerts.slice(0, 4).map(renderAutomationAlert).join('') : '<p class="hint">Aucune alerte bloquante. Les sources et la modération sont propres.</p>'}
         </article>
@@ -437,7 +485,7 @@
     if (warning) {
       return { tone: 'warning', label: `${warning} à surveiller`, title: 'Plateforme opérationnelle', text: 'RouteStop fonctionne, avec quelques points préventifs à contrôler.' };
     }
-    return { tone: 'success', label: 'Tout va bien', title: 'Tous les systèmes sont opérationnels', text: 'Base, authentification et synchronisations sont dans les seuils attendus.' };
+    return { tone: 'success', label: 'Tout va bien', title: 'Tous les systèmes sont opérationnels', text: 'La base, les comptes et les mises à jour fonctionnent normalement.' };
   }
 
   function buildOperationsAlerts() {
@@ -445,7 +493,6 @@
     const result = [];
     const database = operations.database || {};
     const emails = operations.emails || {};
-    const automation = operations.automation || {};
     const limits = monitoringLimits();
     const databasePercent = percent(database.bytes || 0, limits.databaseBytes);
     const mauPercent = percent(operations.users?.signedIn30d || 0, limits.monthlyActiveUsers);
@@ -467,9 +514,6 @@
     }
     if (Number(emails.failed7d) > 0) {
       result.push({ tone: 'warning', title: 'Échecs d’e-mail', text: `${emails.failed7d} échec(s) détecté(s) sur les 7 derniers jours.` });
-    }
-    if (Number(automation.syncFailures24h) > 0) {
-      result.push({ tone: 'warning', title: 'Relances de synchro détectées', text: `${automation.syncFailures24h} tentative(s) en erreur sur 24 heures. Vérifie seulement si la dernière exécution échoue aussi.` });
     }
     return result;
   }
@@ -559,36 +603,42 @@
       <div class="panel inner">
         <div class="panel-head compact">
           <div>
-            <p class="eyebrow">Automatique</p>
-            <h3>Prix carburant centralisés</h3>
+            <p class="eyebrow">Toutes les heures</p>
+            <h3>Prix carburant</h3>
           </div>
-          <span class="pill ${syncTone()}">${lastFuelSyncLabel()}</span>
+          <div class="sync-panel-actions">
+            <span class="pill ${syncTone()}">${lastFuelSyncLabel()}</span>
+            <button class="ghost small" data-action="trigger-sync" data-target="fuel_prices" type="button">Actualiser</button>
+          </div>
         </div>
         <div class="mini-stat-grid">
-          ${statCard('Lignes prix', stats.fuelPriceRows ?? fuelPrices.length, '')}
-          ${statCard('Lignes importées', last?.rowsUpserted ?? last?.rows_upserted ?? '-', '')}
-          ${statCard('Statut', last?.status ?? '-', syncTone())}
+          ${statCard('Stations avec prix', stats.fuelPriceRows ?? fuelPrices.length, '')}
+          ${statCard('Modifiées au dernier passage', last?.rowsUpserted ?? last?.rows_upserted ?? '-', '')}
+          ${statCard('Résultat', syncStatusLabel(last?.status), syncTone())}
         </div>
-        ${last?.message ? `<p class="hint danger-text">${escapeHtml(last.message)}</p>` : ''}
+        ${last?.message ? `<p class="hint danger-text">${escapeHtml(friendlySyncError(last.message))}</p>` : ''}
         ${syncRuns.length ? renderTopList(syncRuns.slice(0, 6).map((run) => ({
-          label: `${run.source} · ${run.status}`,
+          label: `${syncSourceLabel(run.source)} · ${syncStatusLabel(run.status)}`,
           count: run.rows_upserted || 1,
-          sub: `${formatDate(run.finished_at)} · ${run.rows_fetched || 0} lues`,
-        })), 'Aucune synchro.') : '<p class="hint">Aucune synchro automatique lancée pour le moment.</p>'}
+          sub: `${formatDate(run.finished_at)} · ${run.rows_fetched || 0} éléments contrôlés`,
+        })), 'Aucune mise à jour.') : '<p class="hint">Aucune mise à jour automatique lancée pour le moment.</p>'}
       </div>
       <div class="panel inner">
         <div class="panel-head compact">
           <div>
-            <p class="eyebrow">Automatique</p>
-            <h3>Aires centralisées</h3>
+            <p class="eyebrow">Chaque nuit</p>
+            <h3>Aires et services</h3>
           </div>
-          <span class="pill ${serviceSyncTone()}">${lastServiceAreaSyncLabel()}</span>
+          <div class="sync-panel-actions">
+            <span class="pill ${serviceSyncTone()}">${lastServiceAreaSyncLabel()}</span>
+            <button class="ghost small" data-action="trigger-sync" data-target="service_areas" type="button">Actualiser</button>
+          </div>
         </div>
         <div class="mini-stat-grid">
-          ${statCard('Lignes aires', stats.serviceAreaRows ?? serviceAreas.length, '')}
-          ${statCard('Dernier import', lastServiceAreaSync()?.rowsUpserted ?? lastServiceAreaSync()?.rows_upserted ?? '-', '')}
-          ${statCard('Statut', lastServiceAreaSync()?.status ?? '-', serviceSyncTone())}
-          ${statCard('Enrichissement OSM', osmAreaSyncLabel(), osmAreaSyncTone())}
+          ${statCard('Aires disponibles', stats.serviceAreaRows ?? serviceAreas.length, '')}
+          ${statCard('Modifiées au dernier passage', lastServiceAreaSync()?.rowsUpserted ?? lastServiceAreaSync()?.rows_upserted ?? '-', '')}
+          ${statCard('Liste officielle', syncStatusLabel(lastServiceAreaSync()?.status), serviceSyncTone())}
+          ${statCard('Restaurants et services', osmAreaSyncLabel(), osmAreaSyncTone())}
         </div>
       </div>
     `;
@@ -603,9 +653,9 @@
     $('automation-view').innerHTML = `
       <div class="automation-hero">
         <div>
-          <p class="eyebrow">Pilotage automatique</p>
-          <h3>Ce que l’admin doit te remonter sans chercher</h3>
-          <p class="hint">Priorités calculées depuis les signalements, synchros, doublons et usage réel de l’app.</p>
+          <p class="eyebrow">Centre de contrôle</p>
+          <h3>Voir un problème et agir immédiatement</h3>
+          <p class="hint">Les données continuent d’être servies depuis la dernière mise à jour réussie, même lorsqu’une source publique répond mal.</p>
         </div>
         <div class="automation-actions">
           <button data-action="copy-diagnostic" type="button">Copier le diagnostic</button>
@@ -616,17 +666,17 @@
       <div class="automation-grid">
         <article class="panel inner">
           <div class="panel-head compact">
-            <div><p class="eyebrow">Alertes</p><h3>Points à corriger</h3></div>
+            <div><p class="eyebrow">Actions</p><h3>Problèmes à régler</h3></div>
             <span class="pill ${alerts.some(a => a.tone === 'danger') ? 'danger' : alerts.length ? 'warning' : 'success'}">${alerts.length || 'OK'}</span>
           </div>
           <div class="stack">
-            ${alerts.length ? alerts.map(renderAutomationAlert).join('') : '<p class="hint">Aucune alerte. Les données semblent saines.</p>'}
+            ${alerts.length ? alerts.map(renderAutomationAlert).join('') : '<p class="hint">Tout va bien. Aucune intervention nécessaire.</p>'}
           </div>
         </article>
 
         <article class="panel inner">
           <div class="panel-head compact">
-            <div><p class="eyebrow">Sources</p><h3>Fraîcheur des données</h3></div>
+            <div><p class="eyebrow">Derniers passages</p><h3>État des données</h3></div>
           </div>
           <div class="source-table">
             ${sourceRows.map(renderSourceHealthRow).join('')}
@@ -691,96 +741,140 @@
 
     if (lastFuel?.status && lastFuel.status !== 'success') {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Synchro prix en erreur',
-        text: lastFuel.message || 'La dernière synchro carburant n’a pas terminé correctement.',
-        action: 'focus-data',
+        title: 'Les prix n’ont pas été actualisés',
+        text: friendlySyncError(lastFuel.message),
+        action: 'trigger-sync',
+        target: 'fuel_prices',
+        actionLabel: 'Relancer',
       });
     } else if (!lastFuelFinished) {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Aucune synchro prix détectée',
-        text: 'Les prix carburant risquent d’être absents ou obsolètes.',
-        action: 'focus-data',
+        title: 'Aucune mise à jour des prix trouvée',
+        text: 'Lance une première actualisation des prix carburant.',
+        action: 'trigger-sync',
+        target: 'fuel_prices',
+        actionLabel: 'Actualiser',
       });
     } else if (fuelAge > 8) {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Prix carburant trop anciens',
-        text: `Dernière mise à jour il y a ${formatAgeHours(fuelAge)}. L’objectif est une synchro horaire.`,
-        action: 'focus-data',
+        title: 'Les prix sont trop anciens',
+        text: `Dernière actualisation il y a ${formatAgeHours(fuelAge)}.`,
+        action: 'trigger-sync',
+        target: 'fuel_prices',
+        actionLabel: 'Actualiser',
       });
     } else if (fuelAge > 3) {
       alerts.push({
+        category: 'sync',
         tone: 'warning',
-        title: 'Prix carburant à surveiller',
-        text: `Dernière mise à jour il y a ${formatAgeHours(fuelAge)}.`,
-        action: 'focus-data',
+        title: 'Les prix prennent du retard',
+        text: `Dernière actualisation il y a ${formatAgeHours(fuelAge)}.`,
+        action: 'trigger-sync',
+        target: 'fuel_prices',
+        actionLabel: 'Actualiser',
       });
     }
 
     if (lastService?.status && lastService.status !== 'success') {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Synchro aires en erreur',
-        text: lastService.message || 'La dernière synchro des aires n’a pas terminé correctement.',
-        action: 'focus-data',
+        title: 'La liste officielle des aires n’a pas été actualisée',
+        text: friendlySyncError(lastService.message),
+        action: 'trigger-sync',
+        target: 'service_areas',
+        actionLabel: 'Relancer',
       });
     } else if (!lastServiceFinished) {
       alerts.push({
+        category: 'sync',
         tone: 'warning',
-        title: 'Aucune synchro aires détectée',
-        text: 'La base centralisée des aires n’a pas encore de trace de synchro.',
-        action: 'focus-data',
+        title: 'Aucune mise à jour des aires trouvée',
+        text: 'Lance une première actualisation de la liste officielle.',
+        action: 'trigger-sync',
+        target: 'service_areas',
+        actionLabel: 'Actualiser',
       });
     } else if (serviceAge > 36) {
       alerts.push({
+        category: 'sync',
         tone: 'warning',
-        title: 'Base aires à rafraîchir',
-        text: `Dernière mise à jour il y a ${formatAgeHours(serviceAge)}. L’objectif est une synchro quotidienne.`,
-        action: 'focus-data',
+        title: 'La liste des aires prend du retard',
+        text: `Dernière actualisation il y a ${formatAgeHours(serviceAge)}.`,
+        action: 'trigger-sync',
+        target: 'service_areas',
+        actionLabel: 'Actualiser',
       });
     }
 
     const failedOsmRuns = osmRuns.filter((run) => run.status !== 'success');
     if (!osmRuns.length) {
       alerts.push({
+        category: 'sync',
         tone: 'warning',
-        title: 'Enrichissement OSM absent',
-        text: 'Aucune région synchronisée au cours des dernières 36 heures. La base officielle reste servie.',
+        title: 'Les restaurants et services n’ont pas été vérifiés',
+        text: 'Aucune zone n’a été contrôlée depuis 36 heures. La liste officielle reste disponible.',
         action: 'focus-data',
+        actionLabel: 'Voir les données',
       });
     } else if (failedOsmRuns.length) {
-      alerts.push({
-        tone: 'warning',
-        title: 'Enrichissement OSM incomplet',
-        text: `${failedOsmRuns.length} région(s) en erreur sur le dernier passage. La dernière version valide reste servie.`,
-        action: 'focus-data',
-      });
+      for (const run of failedOsmRuns) {
+        const region = run.metadata?.region;
+        alerts.push({
+          category: 'sync',
+          tone: 'warning',
+          title: `${regionLabel(region)} n’a pas été vérifiée`,
+          text: friendlySyncError(run.message),
+          action: 'trigger-sync',
+          target: 'osm_region',
+          region,
+          actionLabel: 'Relancer',
+        });
+      }
     } else if (osmRuns.length > 0 && osmRuns.length < OSM_SYNC_REGION_COUNT) {
-      alerts.push({
-        tone: 'warning',
-        title: 'Couverture OSM partielle',
-        text: `${osmRuns.length}/${OSM_SYNC_REGION_COUNT} régions synchronisées lors du dernier cycle visible.`,
-        action: 'focus-data',
-      });
+      const completed = new Set(osmRuns.map((run) => run.metadata?.region));
+      for (const region of OSM_SYNC_REGIONS) {
+        if (completed.has(region)) continue;
+        alerts.push({
+          category: 'sync',
+          tone: 'warning',
+          title: `${regionLabel(region)} n’a pas encore été vérifiée`,
+          text: 'La dernière version disponible continue d’être utilisée.',
+          action: 'trigger-sync',
+          target: 'osm_region',
+          region,
+          actionLabel: 'Vérifier',
+        });
+      }
     }
 
     if ((stats.fuelPriceRows ?? fuelPrices.length) === 0) {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Aucun prix centralisé visible',
-        text: 'La table fuel_price_snapshots est vide ou inaccessible.',
-        action: 'focus-data',
+        title: 'Aucun prix disponible',
+        text: 'La base ne contient actuellement aucun prix carburant exploitable.',
+        action: 'trigger-sync',
+        target: 'fuel_prices',
+        actionLabel: 'Actualiser',
       });
     }
 
     if ((stats.serviceAreaRows ?? serviceAreas.length) === 0) {
       alerts.push({
+        category: 'sync',
         tone: 'danger',
-        title: 'Aucune aire centralisée visible',
-        text: 'La table service_area_snapshots est vide ou inaccessible.',
-        action: 'focus-data',
+        title: 'Aucune aire disponible',
+        text: 'La base ne contient actuellement aucune aire exploitable.',
+        action: 'trigger-sync',
+        target: 'service_areas',
+        actionLabel: 'Actualiser',
       });
     }
 
@@ -845,7 +939,7 @@
           <strong>${escapeHtml(alert.title)}</strong>
           <span>${escapeHtml(alert.text)}</span>
         </div>
-        ${alert.action ? `<button class="ghost small" data-action="${escapeHtml(alert.action)}" data-search="${escapeHtml(alert.search || '')}" type="button">Voir</button>` : ''}
+        ${alert.action ? `<button class="ghost small" data-action="${escapeHtml(alert.action)}" data-target="${escapeHtml(alert.target || '')}" data-region="${escapeHtml(alert.region || '')}" data-search="${escapeHtml(alert.search || '')}" type="button">${escapeHtml(alert.actionLabel || 'Voir')}</button>` : ''}
       </div>
     `;
   }
@@ -904,21 +998,21 @@
     return [
       {
         label: 'Prix carburant',
-        sub: `${stats.fuelPriceRows ?? fuelPrices.length} lignes visibles`,
-        status: lastFuel?.status || 'inconnu',
+        sub: `${stats.fuelPriceRows ?? fuelPrices.length} stations avec prix`,
+        status: syncStatusLabel(lastFuel?.status),
         updated: fuelFinished,
         tone: syncTone(),
       },
       {
-        label: 'Aires centralisées',
-        sub: `${stats.serviceAreaRows ?? serviceAreas.length} lignes visibles`,
-        status: lastService?.status || 'inconnu',
+        label: 'Liste officielle des aires',
+        sub: `${stats.serviceAreaRows ?? serviceAreas.length} aires disponibles`,
+        status: syncStatusLabel(lastService?.status),
         updated: serviceFinished,
         tone: serviceSyncTone(),
       },
       {
-        label: 'Enrichissement OpenStreetMap',
-        sub: `${latestOsmAreaRuns().length}/${OSM_SYNC_REGION_COUNT} régions contrôlées`,
+        label: 'Restaurants et services',
+        sub: `${latestOsmAreaRuns().length}/${OSM_SYNC_REGION_COUNT} zones contrôlées`,
         status: osmAreaSyncLabel(),
         updated: lastOsmAreaSync()?.finishedAt || lastOsmAreaSync()?.finished_at,
         tone: osmAreaSyncTone(),
@@ -931,9 +1025,9 @@
         tone: reports.some(r => r.status === 'pending') ? 'warning' : 'success',
       },
       {
-        label: 'Corrections actives',
-        sub: `${overrides.filter(x => x.is_active).length} overrides actifs`,
-        status: 'applicable',
+        label: 'Corrections manuelles',
+        sub: `${overrides.filter(x => x.is_active).length} correction(s) active(s)`,
+        status: 'Appliquées',
         updated: overrides[0]?.updated_at,
         tone: 'success',
       },
@@ -1129,6 +1223,50 @@
       const report = reports.find((item) => item.id === button.dataset.id);
       focusReports('pending', report?.station_name || report?.station_id || '');
       if (report) setTimeout(() => prepareSuggestedAction(report.id), 40);
+      return;
+    }
+    if (action === 'trigger-sync') {
+      await triggerSync(button);
+    }
+  }
+
+  async function triggerSync(button) {
+    const target = button.dataset.target;
+    const region = button.dataset.region || null;
+    const labels = {
+      fuel_prices: 'les prix carburant',
+      service_areas: 'la liste officielle des aires',
+      osm_region: `les restaurants et services pour ${regionLabel(region)}`,
+    };
+    const label = labels[target];
+    if (!label) {
+      showFeedback('Action inconnue. Aucune mise à jour lancée.');
+      return;
+    }
+    if (!window.confirm(`Actualiser ${label} maintenant ?`)) return;
+
+    const previousLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Lancement…';
+    try {
+      const { error } = await client.rpc('admin_trigger_sync', {
+        p_target: target,
+        p_region: region,
+      });
+      if (error) throw error;
+      showFeedback(`Mise à jour lancée pour ${label}. Le résultat apparaîtra dans quelques instants.`);
+      window.setTimeout(() => loadAdminData().catch(() => {}), 7000);
+      window.setTimeout(() => loadAdminData().catch(() => {}), 25000);
+    } catch (error) {
+      const message = String(error?.message || 'unknown_error');
+      if (/not_admin|permission|forbidden/i.test(message)) {
+        showFeedback('Action refusée : reconnecte-toi avec le compte administrateur.');
+      } else {
+        showFeedback('Impossible de lancer la mise à jour. Réessaie dans quelques instants.');
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = previousLabel;
     }
   }
 
@@ -2054,7 +2192,7 @@
   function osmAreaSyncLabel() {
     const runs = latestOsmAreaRuns();
     if (!runs.length) return 'Pas encore';
-    return `${runs.filter((run) => run.status === 'success').length}/${OSM_SYNC_REGION_COUNT} régions`;
+    return `${runs.filter((run) => run.status === 'success').length}/${OSM_SYNC_REGION_COUNT} zones vérifiées`;
   }
 
   function osmAreaSyncTone() {
