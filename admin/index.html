@@ -7,11 +7,11 @@
     <meta name="robots" content="noindex,nofollow,noarchive" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co wss://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+      content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; connect-src https://*.supabase.co wss://*.supabase.co; img-src 'self' file: data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     />
     <title>RouteStop Admin</title>
     <link rel="icon" type="image/png" href="../assets/icon.png" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles-v2.css" />
   </head>
   <body>
     <header class="topbar">
@@ -87,26 +87,34 @@
 
       <section id="app-shell" class="admin-shell hidden wide">
         <aside class="sidebar">
-          <button class="nav active" data-view="dashboard" type="button">Dashboard</button>
-          <button class="nav" data-view="reports" type="button">Signalements</button>
-          <button class="nav" data-view="data" type="button">Données</button>
-          <button class="nav" data-view="automation" type="button">Automatisation</button>
-          <button class="nav" data-view="analytics" type="button">Analytics</button>
-          <button id="refresh-btn" class="ghost" type="button">Actualiser</button>
+          <nav aria-label="Administration">
+            <button class="nav active" data-view="home" type="button"><span>⌂</span>Aujourd’hui</button>
+            <button class="nav" data-view="actions" type="button"><span>✓</span>À traiter <em id="pending-nav-count" class="nav-count hidden">0</em></button>
+            <button class="nav" data-view="data" type="button"><span>↻</span>Données</button>
+            <button class="nav" data-view="releases" type="button"><span>↑</span>Versions</button>
+            <button class="nav" data-view="stats" type="button"><span>↗</span>Statistiques</button>
+          </nav>
+          <div class="sidebar-bottom">
+            <button class="nav secondary" data-view="maintenance" type="button"><span>⚙</span>Maintenance</button>
+            <button id="refresh-btn" class="ghost refresh" type="button">Actualiser</button>
+          </div>
         </aside>
 
         <section class="workspace">
           <div class="workspace-head">
             <div>
-              <p class="eyebrow" id="view-eyebrow">Vue globale</p>
-              <h2 id="view-title">Dashboard</h2>
+              <p class="eyebrow" id="view-eyebrow">Pilotage</p>
+              <h2 id="view-title">Aujourd’hui</h2>
             </div>
-            <p id="admin-feedback" class="hint"></p>
+            <div class="workspace-status">
+              <span id="live-state" class="live-state"><i></i>Direct</span>
+              <p id="admin-feedback" class="hint" role="status"></p>
+            </div>
           </div>
 
-          <section id="dashboard-view" class="view"></section>
+          <section id="home-view" class="view" aria-live="polite"></section>
 
-          <section id="reports-view" class="view hidden">
+          <section id="actions-view" class="view hidden">
             <div class="toolbar">
               <div class="segmented" id="status-tabs">
                 <button class="active" data-status="pending" type="button">À traiter</button>
@@ -120,14 +128,15 @@
           </section>
 
           <section id="data-view" class="view hidden"></section>
-          <section id="automation-view" class="view hidden"></section>
-          <section id="analytics-view" class="view hidden"></section>
+          <section id="releases-view" class="view hidden"></section>
+          <section id="stats-view" class="view hidden"></section>
+          <section id="maintenance-view" class="view hidden"></section>
         </section>
       </section>
     </main>
 
     <script src="./config.js"></script>
     <script src="./vendor/supabase-js-2.105.1.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app-v2.js"></script>
   </body>
 </html>
