@@ -779,6 +779,8 @@
     const fuel = latest.find((run) => run.source === 'fuel_prices_gov');
     const official = latest.find((run) => run.source === 'service_areas_operator');
     const osmRuns = latest.filter((run) => run.source === 'service_areas_osm');
+    const currentFailures = latest.filter((run) => run.status === 'error').length;
+    const currentPartials = latest.filter((run) => run.status === 'partial').length;
     const activeRuns = recent.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
     const fuelActive = activeRuns.some((run) => run.source === 'fuel_prices_gov');
     const officialActive = activeRuns.some((run) => run.source === 'service_areas_operator');
@@ -789,7 +791,7 @@
         ${kpiCard('Prix carburant', counts.fuelPrices ?? 0, 'Lignes centralisées')}
         ${kpiCard('Aires', counts.serviceAreas ?? 0, 'Fiches centralisées')}
         ${kpiCard('Corrections actives', counts.activeOverrides ?? 0, 'Modifications admin')}
-        ${kpiCard('Incidents sur 7 jours', Number(counts.failures7d || 0) + Number(counts.partials7d || 0), `${counts.failures7d ?? 0} échec(s) · ${counts.partials7d ?? 0} partiel(s)`)}
+        ${kpiCard('Sources à vérifier', currentFailures + currentPartials, `${currentFailures} en échec · ${currentPartials} partielle(s)`)}
       </section>
 
       <section class="source-grid">
@@ -1204,6 +1206,10 @@
     const automation = operations.automation ?? {};
     const config = readConfig();
     const usageUrl = safeExternalUrl(config.usageUrl);
+    const homeSyncs = state.home?.data?.latestSyncs;
+    const currentSyncFailures = Array.isArray(homeSyncs)
+      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error').length
+      : Number(automation.syncFailures24h) || 0;
 
     $('maintenance-view').innerHTML = `
       <section class="maintenance-grid">
@@ -1220,7 +1226,7 @@
           <div class="card-head"><div><h3>Base et automatisations</h3><p>État technique utile, sans détails internes inutiles.</p></div></div>
           <div class="source-list">
             ${maintenanceRow('Tâches planifiées', Number(automation.cronActive) === Number(automation.cronTotal), `${automation.cronActive ?? 0} actives sur ${automation.cronTotal ?? 0}`)}
-            ${maintenanceRow('Synchronisations en échec', Number(automation.syncFailures24h) === 0, `${automation.syncFailures24h ?? 0} sur 24 heures`)}
+            ${maintenanceRow('Sources en échec actuellement', currentSyncFailures === 0, `${currentSyncFailures} source(s) concernée(s)`)}
             ${maintenanceRow('Connexions PostgreSQL', Number(database.connectionPercent) < 80, `${database.connectionPercent ?? 0}% de la capacité`)}
           </div>
           ${usageUrl ? `<p style="margin-top:14px"><a href="${escapeHtml(usageUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir l’utilisation Supabase</a></p>` : ''}
@@ -1278,7 +1284,7 @@
       `- Prix centralisés : ${database.fuelPriceRows ?? 0}`,
       `- Aires centralisées : ${database.serviceAreaRows ?? 0}`,
       `- Tâches planifiées : ${automation.cronActive ?? 0}/${automation.cronTotal ?? 0}`,
-      `- Échecs de synchronisation sur 24 h : ${automation.syncFailures24h ?? 0}`,
+      `- Tentatives de synchronisation échouées sur 24 h : ${automation.syncFailures24h ?? 0}`,
       `- E-mails livrés sur 7 jours : ${emails.delivered7d ?? 0}`,
       `- E-mails en échec sur 7 jours : ${emails.failed7d ?? 0}`,
       `- Base : ${formatBytes(database.bytes ?? 0)}`,
