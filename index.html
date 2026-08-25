@@ -1,47 +1,229 @@
 <!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
-    <meta name="theme-color" content="#201354">
-    <meta
-      name="description"
-      content="RouteStop aide à comparer les aires d'autoroute situées sur un trajet."
-    >
-    <title>RouteStop</title>
-    <link rel="icon" type="image/png" href="assets/icon.png">
-    <link rel="stylesheet" href="legal.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="index.html" aria-label="Accueil RouteStop">
-          <img src="assets/icon.png" alt="" width="54" height="54">
-          <span>RouteStop</span>
-        </a>
-      </header>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f8f3ff" />
+  <title>RouteStop — Trouvez la bonne aire sur votre trajet</title>
+  <meta name="description" content="RouteStop affiche les aires réellement situées sur votre trajet, compare les prix carburants, restaurants et services, puis ouvre l’arrêt choisi dans Waze, Google Maps ou Plans." />
+  <meta property="og:title" content="RouteStop — La bonne aire avant de vous arrêter" />
+  <meta property="og:description" content="Aires d’autoroute, prix carburants, restaurants et services utiles le long de votre trajet." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://routestop.fr/" />
+  <meta property="og:image" content="https://routestop.fr/assets/social-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://routestop.fr/" />
+  <link rel="icon" type="image/png" href="assets/icon.png" />
+  <link rel="stylesheet" href="site.css" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "RouteStop",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "iOS",
+      "description": "RouteStop aide à choisir une aire d’autoroute utile le long d’un trajet.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+    }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#contenu">Aller au contenu</a>
 
-      <article class="hero">
-        <p class="eyebrow">AIRES D'AUTOROUTE</p>
-        <h1>Ne vous arrêtez plus au hasard.</h1>
-        <p class="lead">
-          RouteStop permet de comparer les aires, les services, les enseignes et
-          les prix des carburants disponibles le long de votre trajet.
+  <header class="topbar">
+    <nav class="shell nav" aria-label="Navigation principale">
+      <a class="brand" href="#top" aria-label="RouteStop, accueil">
+        <img src="assets/icon.png" alt="" width="48" height="48" />
+        <span>RouteStop</span>
+      </a>
+      <div class="nav-links">
+        <a href="#fonctionnalites">Fonctionnalités</a>
+        <a href="#demo">Démo</a>
+        <a href="support.html">Support</a>
+      </div>
+      <a class="nav-cta" href="#lancement">Bientôt sur iPhone</a>
+    </nav>
+  </header>
+
+  <main id="contenu">
+    <section class="hero" id="top">
+      <div class="shell hero-grid">
+        <div class="hero-copy">
+          <p class="status"><span></span> Lancement iPhone imminent</p>
+          <h1>La bonne aire,<br /><strong>avant de vous arrêter.</strong></h1>
+          <p class="hero-lead">
+            Saisissez votre trajet. RouteStop affiche les aires sur votre route,
+            compare les prix carburants, restaurants et services, puis vous guide
+            vers l’arrêt choisi.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#demo">Voir l’app en action</a>
+            <a class="button secondary" href="#fonctionnalites">Découvrir RouteStop</a>
+          </div>
+          <ul class="quick-points" aria-label="Avantages principaux">
+            <li>Recherche sans compte</li>
+            <li>Prix datés</li>
+            <li>Waze, Maps et Plans</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual" aria-label="Aperçus réels de RouteStop sur iPhone">
+          <div class="phone phone-back">
+            <img src="assets/app-search.jpg" alt="Écran de recherche RouteStop" width="644" height="1400" />
+          </div>
+          <div class="phone phone-front">
+            <img src="assets/app-map.jpg" alt="Carte RouteStop montrant les aires sur un trajet" width="644" height="1400" />
+          </div>
+          <div class="floating-card card-top"><b>Sur votre trajet</b><small>Pas de détour au hasard</small></div>
+          <div class="floating-card card-bottom"><b>Prix comparés</b><small>Avec leur date de mise à jour</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="proof-strip" aria-label="Ce que permet RouteStop">
+      <div class="shell proof-grid">
+        <div><b>Le bon sens</b><span>Des aires cohérentes avec votre itinéraire.</span></div>
+        <div><b>Le bon choix</b><span>Carburant, enseignes, restaurants et services.</span></div>
+        <div><b>Le bon départ</b><span>Ouverture directe dans votre app de navigation.</span></div>
+      </div>
+    </section>
+
+    <section class="section shell" id="fonctionnalites">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Tout ce qu’il faut avant la pause</p>
+          <h2>Choisissez une aire qui vous correspond.</h2>
+        </div>
+        <p>
+          Les informations utiles sont réunies au même endroit pour éviter de
+          découvrir les services seulement après avoir quitté l’autoroute.
         </p>
+      </div>
 
-        <nav class="actions" aria-label="Informations RouteStop">
-          <a class="button" href="confidentialite.html">
-            Politique de confidentialité
-          </a>
-          <a class="button secondary" href="support.html">Support</a>
-        </nav>
-      </article>
+      <div class="feature-grid">
+        <article class="feature feature-route">
+          <span class="feature-icon">⌁</span>
+          <div>
+            <h3>Les aires réellement sur votre route</h3>
+            <p>Visualisez l’itinéraire, la distance depuis le départ et les prochains arrêts utiles.</p>
+          </div>
+        </article>
+        <article class="feature">
+          <span class="feature-icon">€</span>
+          <h3>Prix carburants lisibles</h3>
+          <p>Comparez les carburants disponibles et vérifiez leur date de mise à jour.</p>
+        </article>
+        <article class="feature">
+          <span class="feature-icon">◫</span>
+          <h3>Restaurants et services</h3>
+          <p>Repérez restauration, boutiques, WC, douches, recharge et autres équipements.</p>
+        </article>
+        <article class="feature feature-wide">
+          <span class="feature-icon">↗</span>
+          <div>
+            <h3>Vous choisissez. Votre GPS vous y conduit.</h3>
+            <p>Envoyez l’aire vers Waze, Google Maps ou Plans en un geste.</p>
+          </div>
+          <div class="nav-badges"><span>Waze</span><span>Google Maps</span><span>Plans</span></div>
+        </article>
+      </div>
+    </section>
 
-      <footer class="footer">
-        <span>RouteStop · Cachi AppsStudio</span>
-        <a href="mailto:support@routestop.fr">support@routestop.fr</a>
-      </footer>
-    </main>
-  </body>
+    <section class="section how-it-works">
+      <div class="shell">
+        <p class="eyebrow">Simple du départ à l’arrêt</p>
+        <h2>Trois étapes, pas de détour.</h2>
+        <ol class="steps">
+          <li><span>1</span><div><h3>Entrez votre trajet</h3><p>Un départ, une destination, puis RouteStop calcule les aires utiles.</p></div></li>
+          <li><span>2</span><div><h3>Comparez les arrêts</h3><p>Prix, enseignes, restauration, services et distance sont réunis.</p></div></li>
+          <li><span>3</span><div><h3>Lancez la navigation</h3><p>Choisissez votre GPS habituel et reprenez la route sereinement.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section shell demo-section" id="demo">
+      <div class="demo-copy">
+        <p class="eyebrow">L’application en mouvement</p>
+        <h2>Comprenez RouteStop en quelques secondes.</h2>
+        <p>
+          De la recherche à la fiche d’une aire, l’information reste centrée sur
+          une seule décision : où faire la bonne pause.
+        </p>
+        <ul class="check-list">
+          <li>Carte et liste synchronisées</li>
+          <li>Meilleur prix mis en évidence</li>
+          <li>Source et fiabilité affichées</li>
+          <li>Préférences personnalisables</li>
+        </ul>
+      </div>
+      <div class="video-shell">
+        <video controls muted loop playsinline preload="metadata" poster="assets/app-map.jpg" aria-label="Démonstration vidéo de RouteStop">
+          <source src="assets/routestop-demo.mp4" type="video/mp4" />
+          Votre navigateur ne prend pas en charge la vidéo. Consultez les captures ci-dessous.
+        </video>
+      </div>
+    </section>
+
+    <section class="section screenshots-section">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">De vraies captures de l’application</p>
+            <h2>Tout est visible avant de choisir.</h2>
+          </div>
+          <p>Ces écrans correspondent à l’application iPhone soumise à l’App Store.</p>
+        </div>
+        <div class="screenshots" aria-label="Galerie RouteStop">
+          <figure><img loading="lazy" src="assets/app-search.jpg" alt="Recherche d’un trajet dans RouteStop" width="644" height="1400" /><figcaption>Recherchez votre trajet</figcaption></figure>
+          <figure><img loading="lazy" src="assets/app-map.jpg" alt="Carte des aires sur un trajet RouteStop" width="644" height="1400" /><figcaption>Visualisez les aires</figcaption></figure>
+          <figure><img loading="lazy" src="assets/app-list.jpg" alt="Liste RouteStop comparant prix et services" width="644" height="1400" /><figcaption>Comparez les arrêts</figcaption></figure>
+          <figure><img loading="lazy" src="assets/app-detail.jpg" alt="Détail d’une aire dans RouteStop" width="644" height="1400" /><figcaption>Vérifiez tous les détails</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section data-section">
+      <div class="shell data-grid">
+        <div><p class="eyebrow">Des données utiles</p><h2>Vous savez ce que vous regardez.</h2></div>
+        <div class="data-points">
+          <article><b>Prix datés</b><p>La dernière mise à jour disponible accompagne chaque tarif.</p></article>
+          <article><b>Sources indiquées</b><p>La provenance des informations est visible dans la fiche de l’aire.</p></article>
+          <article><b>Signalements possibles</b><p>Les utilisateurs connectés peuvent signaler une information à vérifier.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="launch" id="lancement">
+      <div class="shell launch-card">
+        <img src="assets/icon.png" alt="" width="76" height="76" />
+        <p class="eyebrow">RouteStop arrive sur iPhone</p>
+        <h2>La prochaine pause commence avant la sortie.</h2>
+        <p>Application gratuite. Suivez le lancement et les prochaines démonstrations.</p>
+        <div class="social-links" aria-label="Suivre RouteStop">
+          <a href="https://www.instagram.com/routestopapp/" rel="me noopener">Instagram</a>
+          <a href="https://www.tiktok.com/@.routestop" rel="me noopener">TikTok</a>
+          <a href="https://www.facebook.com/profile.php?id=61593622746827" rel="me noopener">Facebook</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-grid">
+      <div>
+        <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="42" height="42" /><span>RouteStop</span></a>
+        <p>Ne manipulez jamais l’application en conduisant. La signalisation routière reste prioritaire.</p>
+      </div>
+      <div class="footer-links">
+        <a href="support.html">Support</a>
+        <a href="confidentialite.html">Confidentialité</a>
+        <a href="mailto:support@routestop.fr">Contact</a>
+      </div>
+    </div>
+    <div class="shell footer-bottom">© 2026 RouteStop · Cachi AppsStudio</div>
+  </footer>
+</body>
 </html>
