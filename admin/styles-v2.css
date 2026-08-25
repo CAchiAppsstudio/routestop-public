@@ -506,6 +506,113 @@ textarea:focus {
   font-weight: 700;
 }
 
+.capacity-panel {
+  padding: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 17px;
+  background: linear-gradient(135deg, #fff, #faf7ff);
+  box-shadow: 0 8px 24px rgba(44, 28, 76, 0.035);
+}
+
+.capacity-head,
+.quota-top,
+.quota-values {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.capacity-head > div > p:last-child {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.capacity-link {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.quota-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.quota-item {
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.quota-top {
+  align-items: flex-start;
+}
+
+.quota-top strong {
+  display: block;
+  font-size: 13px;
+}
+
+.quota-top p,
+.capacity-note,
+.quota-item small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.quota-top p {
+  margin-top: 3px;
+}
+
+.quota-values {
+  justify-content: flex-start;
+  margin-top: 13px;
+}
+
+.quota-values strong {
+  font-size: 24px;
+  letter-spacing: -0.5px;
+}
+
+.quota-values span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.quota-track {
+  height: 8px;
+  margin: 9px 0 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee9f5;
+}
+
+.quota-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+}
+
+.quota-item.warning .quota-track i {
+  background: var(--orange);
+}
+
+.quota-item.danger .quota-track i {
+  background: var(--red);
+}
+
+.capacity-note {
+  margin-top: 13px;
+}
+
 .section-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1087,9 +1194,15 @@ textarea:focus {
   .kpi-grid,
   .section-grid,
   .source-grid,
+  .quota-grid,
   .maintenance-grid,
   .correction-grid {
     grid-template-columns: 1fr;
+  }
+
+  .capacity-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .toolbar {

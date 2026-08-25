@@ -47,6 +47,14 @@
     stats: ['Utilisation', 'Statistiques'],
     maintenance: ['Technique', 'Maintenance'],
   };
+  const SUPABASE_PLAN_LIMITS = {
+    free: {
+      monthlyActiveUsers: 50000,
+      databaseBytes: 500 * 1024 * 1024,
+    },
+  };
+  const QUOTA_WARNING_PERCENT = 70;
+  const QUOTA_DANGER_PERCENT = 90;
 
   const state = {
     home: null,
@@ -94,21 +102,30 @@
     const fromWindow = window.ROUTESTOP_SUPABASE ?? {};
     try {
       const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) ?? '{}');
+      const plan = fromWindow.plan || saved.plan || 'free';
       return {
         url: fromWindow.url || saved.url || '',
         anonKey: fromWindow.anonKey || saved.anonKey || '',
         managed: fromWindow.managed === true,
-        plan: fromWindow.plan || 'free',
-        limits: fromWindow.limits || {},
-        usageUrl: fromWindow.usageUrl || '',
+        plan,
+        limits: {
+          ...(SUPABASE_PLAN_LIMITS[plan] ?? {}),
+          ...(saved.limits ?? {}),
+          ...(fromWindow.limits ?? {}),
+        },
+        usageUrl: fromWindow.usageUrl || saved.usageUrl || '',
       };
     } catch {
+      const plan = fromWindow.plan || 'free';
       return {
         url: fromWindow.url || '',
         anonKey: fromWindow.anonKey || '',
         managed: fromWindow.managed === true,
-        plan: fromWindow.plan || 'free',
-        limits: fromWindow.limits || {},
+        plan,
+        limits: {
+          ...(SUPABASE_PLAN_LIMITS[plan] ?? {}),
+          ...(fromWindow.limits ?? {}),
+        },
         usageUrl: fromWindow.usageUrl || '',
       };
     }
@@ -302,7 +319,12 @@
 
     try {
       if (view === 'home') {
-        state.home = await query(client.rpc('admin_home_v2'));
+        const [home, operations] = await Promise.all([
+          query(client.rpc('admin_home_v2')),
+          query(client.rpc('admin_operations_v1')),
+        ]);
+        state.home = home;
+        state.operations = operations;
       } else if (view === 'actions') {
         state.reports = await query(client
           .from('station_reports')
@@ -369,6 +391,15 @@
     const releaseData = payload.releases ?? {};
     const activity = payload.activity ?? {};
     const operations = payload.operations ?? {};
+    const capacityOperations = state.operations ?? {
+      users: {
+        total: activity.usersTotal,
+        new7d: activity.newUsers7d,
+        signedIn7d: activity.activeUsers7d,
+        signedIn30d: activity.activeUsers7d,
+      },
+      database: { bytes: operations.databaseBytes },
+    };
     const latestSyncs = currentSyncRows(data.latestSyncs);
     const syncErrors = latestSyncs.filter((item) => item.status === 'error');
     const syncPartials = latestSyncs.filter((item) => item.status === 'partial');
@@ -410,9 +441,11 @@
       <section class="kpi-grid">
         ${kpiCard('À traiter', pendingCount, pendingCount ? 'Action requise' : 'File vide')}
         ${kpiCard('Recherches sur 7 jours', activity.routeSearches7d ?? 0, `${activity.routeSearches24h ?? 0} sur 24 h`)}
-        ${kpiCard('Utilisateurs actifs', activity.activeUsers7d ?? 0, 'Sur 7 jours')}
+        ${kpiCard('Comptes inscrits', activity.usersTotal ?? 0, `${activity.activeUsers7d ?? 0} actifs sur 7 jours`)}
         ${kpiCard('Aires en base', data.serviceAreaRows ?? 0, `${data.fuelPriceRows ?? 0} prix carburant`)}
       </section>
+
+      ${renderSupabaseCapacity(capacityOperations)}
 
       <section class="section-grid">
         <article class="card">
@@ -521,6 +554,19 @@
         tone: 'danger',
         title: `${formatNumber(operations.emailFailures7d)} e-mail${Number(operations.emailFailures7d) > 1 ? 's' : ''} non livré${Number(operations.emailFailures7d) > 1 ? 's' : ''}`,
         text: 'Échec, rebond ou blocage détecté sur les sept derniers jours.',
+        view: 'maintenance',
+        action: 'Vérifier',
+      });
+    }
+    const capacity = getSupabaseCapacity(state.operations);
+    const quotaWarnings = capacity.metrics.filter((metric) => metric.percent >= QUOTA_WARNING_PERCENT);
+    if (quotaWarnings.length) {
+      const critical = quotaWarnings.some((metric) => metric.percent >= QUOTA_DANGER_PERCENT);
+      tasks.push({
+        icon: '%',
+        tone: critical ? 'danger' : 'warning',
+        title: critical ? 'Quota Supabase presque atteint' : 'Capacité Supabase à surveiller',
+        text: quotaWarnings.map((metric) => `${metric.shortLabel} ${formatPercent(metric.percent)}`).join(' · '),
         view: 'maintenance',
         action: 'Vérifier',
       });
@@ -1212,13 +1258,16 @@
       : Number(automation.syncFailures24h) || 0;
 
     $('maintenance-view').innerHTML = `
+      ${renderSupabaseCapacity(operations, true)}
+
       <section class="maintenance-grid">
+        ${maintenanceCard('Comptes inscrits', users.total ?? 0, `${users.new7d ?? 0} nouveaux sur 7 jours`)}
+        ${maintenanceCard('Actifs estimés', users.signedIn30d ?? 0, 'Comptes connectés sur 30 jours')}
+        ${maintenanceCard('Taille de la base', formatBytes(database.bytes ?? 0), 'Stockage PostgreSQL')}
         ${maintenanceCard('Tâches planifiées', `${automation.cronActive ?? 0}/${automation.cronTotal ?? 0}`, 'Actives / configurées')}
         ${maintenanceCard('Connexions base', `${database.connections ?? 0}/${database.maxConnections ?? 0}`, `${database.connectionPercent ?? 0}% utilisé`)}
-        ${maintenanceCard('Taille de la base', formatBytes(database.bytes ?? 0), 'Stockage PostgreSQL')}
         ${maintenanceCard('E-mails envoyés', emails.sent7d ?? 0, `${emails.delivered7d ?? 0} livrés sur 7 jours`)}
         ${maintenanceCard('Échecs e-mail', emails.failed7d ?? 0, 'Échecs, rebonds ou plaintes')}
-        ${maintenanceCard('Comptes', users.total ?? 0, `${users.new7d ?? 0} nouveaux sur 7 jours`)}
       </section>
 
       <section class="section-grid">
@@ -1249,6 +1298,96 @@
     `;
   }
 
+  function getSupabaseCapacity(operations = {}) {
+    const config = readConfig();
+    const users = operations?.users ?? {};
+    const database = operations?.database ?? {};
+    const monthlyActiveUsersLimit = Number(config.limits.monthlyActiveUsers) || 0;
+    const databaseBytesLimit = Number(config.limits.databaseBytes) || 0;
+    const monthlyActiveUsers = Number(users.signedIn30d) || 0;
+    const databaseBytes = Number(database.bytes) || 0;
+
+    return {
+      plan: config.plan,
+      usageUrl: safeExternalUrl(config.usageUrl),
+      totalUsers: Number(users.total) || 0,
+      metrics: [
+        quotaMetric({
+          key: 'mau',
+          label: 'Utilisateurs actifs mensuels',
+          shortLabel: 'MAU',
+          used: monthlyActiveUsers,
+          limit: monthlyActiveUsersLimit,
+          usedLabel: formatNumber(monthlyActiveUsers),
+          limitLabel: formatNumber(monthlyActiveUsersLimit),
+          remainingLabel: `${formatNumber(Math.max(0, monthlyActiveUsersLimit - monthlyActiveUsers))} disponibles`,
+          detail: 'Estimation à partir des connexions des 30 derniers jours',
+        }),
+        quotaMetric({
+          key: 'database',
+          label: 'Base de données',
+          shortLabel: 'Base',
+          used: databaseBytes,
+          limit: databaseBytesLimit,
+          usedLabel: formatBytes(databaseBytes),
+          limitLabel: formatBytes(databaseBytesLimit),
+          remainingLabel: `${formatBytes(Math.max(0, databaseBytesLimit - databaseBytes))} disponibles`,
+          detail: 'Taille PostgreSQL mesurée en direct',
+        }),
+      ],
+    };
+  }
+
+  function quotaMetric(metric) {
+    const percent = metric.limit > 0 ? (metric.used / metric.limit) * 100 : 0;
+    return {
+      ...metric,
+      percent,
+      tone: percent >= QUOTA_DANGER_PERCENT
+        ? 'danger'
+        : percent >= QUOTA_WARNING_PERCENT ? 'warning' : 'success',
+    };
+  }
+
+  function renderSupabaseCapacity(operations, detailed = false) {
+    const capacity = getSupabaseCapacity(operations);
+    const planName = capacity.plan === 'free' ? 'Gratuit' : capacity.plan;
+    return `
+      <section class="capacity-panel">
+        <div class="capacity-head">
+          <div>
+            <p class="eyebrow">Capacité Supabase</p>
+            <h3>Plan ${escapeHtml(planName)}</h3>
+            <p>${formatNumber(capacity.totalUsers)} compte${capacity.totalUsers > 1 ? 's' : ''} créé${capacity.totalUsers > 1 ? 's' : ''} au total.</p>
+          </div>
+          ${capacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(capacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Chiffres exacts Supabase</a>` : `<span class="pill info">Plan ${escapeHtml(planName)}</span>`}
+        </div>
+        <div class="quota-grid">
+          ${capacity.metrics.map(renderQuotaMetric).join('')}
+        </div>
+        <p class="capacity-note">
+          Le quota MAU concerne les comptes qui se connectent ou renouvellent leur session pendant le cycle, pas le nombre total de comptes.
+          ${detailed ? 'L’estimation locale peut donc être inférieure au chiffre de facturation exact affiché par Supabase.' : 'Le détail exact reste disponible dans Supabase.'}
+        </p>
+      </section>
+    `;
+  }
+
+  function renderQuotaMetric(metric) {
+    const visualPercent = metric.used > 0 ? Math.max(1, Math.min(100, metric.percent)) : 0;
+    return `
+      <article class="quota-item ${escapeHtml(metric.tone)}">
+        <div class="quota-top">
+          <div><strong>${escapeHtml(metric.label)}</strong><p>${escapeHtml(metric.detail)}</p></div>
+          <span class="pill ${escapeHtml(metric.tone)}">${escapeHtml(formatPercent(metric.percent))}</span>
+        </div>
+        <div class="quota-values"><strong>${escapeHtml(metric.usedLabel)}</strong><span>sur ${escapeHtml(metric.limitLabel)}</span></div>
+        <div class="quota-track" role="progressbar" aria-label="${escapeHtml(metric.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(metric.percent))}"><i style="width:${visualPercent}%"></i></div>
+        <small>${escapeHtml(metric.remainingLabel)}</small>
+      </article>
+    `;
+  }
+
   function maintenanceCard(label, value, detail) {
     return `<article class="maintenance-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatNumberOrText(value))}</strong><small>${escapeHtml(detail)}</small></article>`;
   }
@@ -1276,10 +1415,14 @@
   }
 
   function diagnosticText({ users, database, emails, activity, automation }) {
+    const capacity = getSupabaseCapacity({ users, database });
+    const monthlyActiveUsers = capacity.metrics.find((metric) => metric.key === 'mau');
+    const databaseUsage = capacity.metrics.find((metric) => metric.key === 'database');
     return [
       '# RouteStop Admin — diagnostic',
       '',
       `- Comptes : ${users.total ?? 0}`,
+      `- MAU estimés sur 30 jours : ${monthlyActiveUsers?.usedLabel ?? 0}/${monthlyActiveUsers?.limitLabel ?? '—'} (${formatPercent(monthlyActiveUsers?.percent ?? 0)})`,
       `- Utilisateurs actifs sur 7 jours : ${activity.activeUsers7d ?? 0}`,
       `- Prix centralisés : ${database.fuelPriceRows ?? 0}`,
       `- Aires centralisées : ${database.serviceAreaRows ?? 0}`,
@@ -1287,7 +1430,7 @@
       `- Tentatives de synchronisation échouées sur 24 h : ${automation.syncFailures24h ?? 0}`,
       `- E-mails livrés sur 7 jours : ${emails.delivered7d ?? 0}`,
       `- E-mails en échec sur 7 jours : ${emails.failed7d ?? 0}`,
-      `- Base : ${formatBytes(database.bytes ?? 0)}`,
+      `- Base : ${databaseUsage?.usedLabel ?? formatBytes(database.bytes ?? 0)}/${databaseUsage?.limitLabel ?? '—'} (${formatPercent(databaseUsage?.percent ?? 0)})`,
       `- Connexions : ${database.connections ?? 0}/${database.maxConnections ?? 0}`,
     ].join('\n');
   }
@@ -1473,6 +1616,12 @@
 
   function formatNumberOrText(value) {
     return typeof value === 'number' ? formatNumber(value) : String(value ?? '—');
+  }
+
+  function formatPercent(value) {
+    const percent = Number(value) || 0;
+    if (percent > 0 && percent < 0.1) return '< 0,1 %';
+    return `${percent.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
   }
 
   function formatBytes(value) {
