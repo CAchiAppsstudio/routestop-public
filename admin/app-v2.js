@@ -53,6 +53,13 @@
       databaseBytes: 500 * 1024 * 1024,
     },
   };
+  const RESEND_PLAN_LIMITS = {
+    free: {
+      emailDailyUnits: 100,
+      emailMonthlyUnits: 3000,
+    },
+  };
+  const RESEND_USAGE_URL = 'https://resend.com/settings/usage';
   const QUOTA_WARNING_PERCENT = 70;
   const QUOTA_DANGER_PERCENT = 90;
 
@@ -65,6 +72,7 @@
     analytics: null,
     analyticsDays: 30,
     operations: null,
+    emailQuota: null,
     loaded: new Set(),
     loading: new Set(),
   };
@@ -103,6 +111,7 @@
     try {
       const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) ?? '{}');
       const plan = fromWindow.plan || saved.plan || 'free';
+      const emailPlan = fromWindow.emailPlan || saved.emailPlan || 'free';
       return {
         url: fromWindow.url || saved.url || '',
         anonKey: fromWindow.anonKey || saved.anonKey || '',
@@ -110,13 +119,17 @@
         plan,
         limits: {
           ...(SUPABASE_PLAN_LIMITS[plan] ?? {}),
+          ...(RESEND_PLAN_LIMITS[emailPlan] ?? {}),
           ...(saved.limits ?? {}),
           ...(fromWindow.limits ?? {}),
         },
         usageUrl: fromWindow.usageUrl || saved.usageUrl || '',
+        emailPlan,
+        emailUsageUrl: fromWindow.emailUsageUrl || saved.emailUsageUrl || RESEND_USAGE_URL,
       };
     } catch {
       const plan = fromWindow.plan || 'free';
+      const emailPlan = fromWindow.emailPlan || 'free';
       return {
         url: fromWindow.url || '',
         anonKey: fromWindow.anonKey || '',
@@ -124,9 +137,12 @@
         plan,
         limits: {
           ...(SUPABASE_PLAN_LIMITS[plan] ?? {}),
+          ...(RESEND_PLAN_LIMITS[emailPlan] ?? {}),
           ...(fromWindow.limits ?? {}),
         },
         usageUrl: fromWindow.usageUrl || '',
+        emailPlan,
+        emailUsageUrl: fromWindow.emailUsageUrl || RESEND_USAGE_URL,
       };
     }
   }
@@ -246,6 +262,7 @@
     state.releases = [];
     state.analytics = null;
     state.operations = null;
+    state.emailQuota = null;
     state.loaded.clear();
     state.loading.clear();
   }
@@ -299,6 +316,10 @@
     return `<div class="error-block">Impossible de charger cette partie. ${escapeHtml(message)}</div>`;
   }
 
+  function viewRenderTarget(view) {
+    return view === 'actions' ? $('reports-list') : $(`${view}-view`);
+  }
+
   async function query(promise) {
     const { data, error } = await promise;
     if (error) throw error;
@@ -313,18 +334,20 @@
     }
 
     state.loading.add(view);
-    const viewElement = $(`${view}-view`);
+    const viewElement = viewRenderTarget(view);
     if (viewElement) viewElement.innerHTML = loadingMarkup(VIEW_TITLES[view][1].toLowerCase());
     showFeedback('Vérification…');
 
     try {
       if (view === 'home') {
-        const [home, operations] = await Promise.all([
+        const [home, operations, emailQuota] = await Promise.all([
           query(client.rpc('admin_home_v2')),
           query(client.rpc('admin_operations_v1')),
+          query(client.rpc('admin_email_quota_v1')),
         ]);
         state.home = home;
         state.operations = operations;
+        state.emailQuota = emailQuota;
       } else if (view === 'actions') {
         state.reports = await query(client
           .from('station_reports')
@@ -351,7 +374,12 @@
       } else if (view === 'stats') {
         state.analytics = await query(client.rpc('admin_analytics_v2', { p_days: state.analyticsDays }));
       } else if (view === 'maintenance') {
-        state.operations = await query(client.rpc('admin_operations_v1'));
+        const [operations, emailQuota] = await Promise.all([
+          query(client.rpc('admin_operations_v1')),
+          query(client.rpc('admin_email_quota_v1')),
+        ]);
+        state.operations = operations;
+        state.emailQuota = emailQuota;
       }
       state.loaded.add(view);
       renderView(view);
@@ -406,12 +434,16 @@
     const latestRelease = releaseData.latest;
     const releaseFailed = latestRelease && ['failed', 'rejected'].includes(latestRelease.status);
     const emailFailures = Number(operations.emailFailures7d) || 0;
-    const danger = syncErrors.length > 0 || releaseFailed || emailFailures > 0;
+    const emailCapacity = getEmailCapacity(state.emailQuota);
+    const emailQuotaCritical = emailCapacity.metrics.some((metric) => metric.percent >= QUOTA_DANGER_PERCENT);
+    const emailQuotaWarning = emailCapacity.metrics.some((metric) => metric.percent >= QUOTA_WARNING_PERCENT);
+    const danger = syncErrors.length > 0 || releaseFailed || emailFailures > 0 || emailQuotaCritical;
     const warning = !danger && (
       syncPartials.length > 0
       || Number(reportData.pending) > 0
       || Number(releaseData.active) > 0
       || (data.activeRuns ?? []).length > 0
+      || emailQuotaWarning
     );
     const healthTone = danger ? 'danger' : warning ? 'warning' : 'success';
     const healthTitle = danger
@@ -445,7 +477,7 @@
         ${kpiCard('Aires en base', data.serviceAreaRows ?? 0, `${data.fuelPriceRows ?? 0} prix carburant`)}
       </section>
 
-      ${renderSupabaseCapacity(capacityOperations)}
+      ${renderPlanCapacity(capacityOperations, state.emailQuota)}
 
       <section class="section-grid">
         <article class="card">
@@ -567,6 +599,19 @@
         tone: critical ? 'danger' : 'warning',
         title: critical ? 'Quota Supabase presque atteint' : 'Capacité Supabase à surveiller',
         text: quotaWarnings.map((metric) => `${metric.shortLabel} ${formatPercent(metric.percent)}`).join(' · '),
+        view: 'maintenance',
+        action: 'Vérifier',
+      });
+    }
+    const emailCapacity = getEmailCapacity(state.emailQuota);
+    const emailQuotaWarnings = emailCapacity.metrics.filter((metric) => metric.percent >= QUOTA_WARNING_PERCENT);
+    if (emailQuotaWarnings.length) {
+      const critical = emailQuotaWarnings.some((metric) => metric.percent >= QUOTA_DANGER_PERCENT);
+      tasks.push({
+        icon: '@',
+        tone: critical ? 'danger' : 'warning',
+        title: critical ? 'Quota e-mail presque atteint' : 'Quota e-mail à surveiller',
+        text: emailQuotaWarnings.map((metric) => `${metric.shortLabel} ${formatPercent(metric.percent)}`).join(' · '),
         view: 'maintenance',
         action: 'Vérifier',
       });
@@ -1256,9 +1301,12 @@
     const currentSyncFailures = Array.isArray(homeSyncs)
       ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error').length
       : Number(automation.syncFailures24h) || 0;
+    const emailCapacity = getEmailCapacity(state.emailQuota);
+    const emailDaily = emailCapacity.metrics.find((metric) => metric.key === 'email-day');
+    const emailMonthly = emailCapacity.metrics.find((metric) => metric.key === 'email-month');
 
     $('maintenance-view').innerHTML = `
-      ${renderSupabaseCapacity(operations, true)}
+      ${renderPlanCapacity(operations, state.emailQuota, true)}
 
       <section class="maintenance-grid">
         ${maintenanceCard('Comptes inscrits', users.total ?? 0, `${users.new7d ?? 0} nouveaux sur 7 jours`)}
@@ -1266,7 +1314,8 @@
         ${maintenanceCard('Taille de la base', formatBytes(database.bytes ?? 0), 'Stockage PostgreSQL')}
         ${maintenanceCard('Tâches planifiées', `${automation.cronActive ?? 0}/${automation.cronTotal ?? 0}`, 'Actives / configurées')}
         ${maintenanceCard('Connexions base', `${database.connections ?? 0}/${database.maxConnections ?? 0}`, `${database.connectionPercent ?? 0}% utilisé`)}
-        ${maintenanceCard('E-mails envoyés', emails.sent7d ?? 0, `${emails.delivered7d ?? 0} livrés sur 7 jours`)}
+        ${maintenanceCard('Quota e-mail du jour', `${emailDaily?.usedLabel ?? 0}/${emailDaily?.limitLabel ?? 100}`, formatPercent(emailDaily?.percent ?? 0))}
+        ${maintenanceCard('Quota e-mail du mois', `${emailMonthly?.usedLabel ?? 0}/${emailMonthly?.limitLabel ?? 3000}`, formatPercent(emailMonthly?.percent ?? 0))}
         ${maintenanceCard('Échecs e-mail', emails.failed7d ?? 0, 'Échecs, rebonds ou plaintes')}
       </section>
 
@@ -1282,17 +1331,19 @@
         </article>
 
         <article class="card">
-          <div class="card-head"><div><h3>E-mails techniques</h3><p>Alertes de synchronisation et événements de livraison.</p></div></div>
+          <div class="card-head"><div><h3>E-mails techniques</h3><p>Quotas Resend, alertes et événements de livraison.</p></div></div>
           <div class="source-list">
+            ${maintenanceRow('Quota quotidien', (emailDaily?.percent ?? 0) < QUOTA_WARNING_PERCENT, `${emailDaily?.usedLabel ?? 0}/${emailDaily?.limitLabel ?? 100} unité(s) · ${formatPercent(emailDaily?.percent ?? 0)}`)}
+            ${maintenanceRow('Quota mensuel', (emailMonthly?.percent ?? 0) < QUOTA_WARNING_PERCENT, `${emailMonthly?.usedLabel ?? 0}/${emailMonthly?.limitLabel ?? 3000} unité(s) · ${formatPercent(emailMonthly?.percent ?? 0)}`)}
             ${maintenanceRow('Livraison sur 7 jours', Number(emails.failed7d) === 0, `${emails.delivered7d ?? 0} livrés · ${emails.failed7d ?? 0} échec(s)`)}
-            ${maintenanceRow('Dernier événement reçu', Boolean(emails.lastEventAt), emails.lastEventAt ? relativeDate(emails.lastEventAt) : 'Aucun événement')}
-            ${maintenanceRow('Suivi Resend', Boolean(emails.trackedSince), emails.trackedSince ? `Actif depuis ${formatDate(emails.trackedSince)}` : 'Pas encore initialisé')}
+            ${maintenanceRow('Dernier événement reçu', Boolean(emailCapacity.lastEventAt), emailCapacity.lastEventAt ? relativeDate(emailCapacity.lastEventAt) : 'Aucun événement')}
+            ${maintenanceRow('Suivi Resend', emailCapacity.trackingActive, emailCapacity.trackingActive ? `Actif depuis ${formatDate(emailCapacity.trackedSince)}` : 'Pas encore initialisé')}
           </div>
         </article>
 
         <article class="card wide-card">
           <div class="card-head"><div><h3>Diagnostic partageable</h3><p>Résumé sans clé, adresse utilisateur ni donnée sensible.</p></div><button class="ghost small" data-copy-diagnostic type="button">Copier</button></div>
-          <pre class="command">${escapeHtml(diagnosticText({ users, database, emails, activity, automation }))}</pre>
+          <pre class="command">${escapeHtml(diagnosticText({ users, database, emails, emailQuota: state.emailQuota, activity, automation }))}</pre>
         </article>
       </section>
     `;
@@ -1338,6 +1389,46 @@
     };
   }
 
+  function getEmailCapacity(quota = {}) {
+    const config = readConfig();
+    const dailyLimit = Number(config.limits.emailDailyUnits) || 0;
+    const monthlyLimit = Number(config.limits.emailMonthlyUnits) || 0;
+    const usedToday = Number(quota?.usedToday) || 0;
+    const usedMonth = Number(quota?.usedMonth) || 0;
+
+    return {
+      plan: config.emailPlan,
+      usageUrl: safeExternalUrl(config.emailUsageUrl),
+      trackedSince: quota?.trackedSince || null,
+      lastEventAt: quota?.lastEventAt || null,
+      trackingActive: Boolean(quota?.trackedSince),
+      metrics: [
+        quotaMetric({
+          key: 'email-day',
+          label: 'E-mails aujourd’hui',
+          shortLabel: 'Jour',
+          used: usedToday,
+          limit: dailyLimit,
+          usedLabel: formatNumber(usedToday),
+          limitLabel: formatNumber(dailyLimit),
+          remainingLabel: `${formatNumber(Math.max(0, dailyLimit - usedToday))} disponibles`,
+          detail: quota?.nextDayAt ? `Remise à zéro ${relativeDate(quota.nextDayAt)}` : 'Quota quotidien Resend',
+        }),
+        quotaMetric({
+          key: 'email-month',
+          label: 'E-mails ce mois-ci',
+          shortLabel: 'Mois',
+          used: usedMonth,
+          limit: monthlyLimit,
+          usedLabel: formatNumber(usedMonth),
+          limitLabel: formatNumber(monthlyLimit),
+          remainingLabel: `${formatNumber(Math.max(0, monthlyLimit - usedMonth))} disponibles`,
+          detail: quota?.nextMonthAt ? `Remise à zéro ${formatDate(quota.nextMonthAt)}` : 'Quota mensuel Resend',
+        }),
+      ],
+    };
+  }
+
   function quotaMetric(metric) {
     const percent = metric.limit > 0 ? (metric.used / metric.limit) * 100 : 0;
     return {
@@ -1349,25 +1440,30 @@
     };
   }
 
-  function renderSupabaseCapacity(operations, detailed = false) {
-    const capacity = getSupabaseCapacity(operations);
-    const planName = capacity.plan === 'free' ? 'Gratuit' : capacity.plan;
+  function renderPlanCapacity(operations, emailQuota, detailed = false) {
+    const supabaseCapacity = getSupabaseCapacity(operations);
+    const emailCapacity = getEmailCapacity(emailQuota);
+    const supabasePlanName = supabaseCapacity.plan === 'free' ? 'gratuit' : supabaseCapacity.plan;
+    const emailPlanName = emailCapacity.plan === 'free' ? 'gratuit' : emailCapacity.plan;
     return `
       <section class="capacity-panel">
         <div class="capacity-head">
           <div>
-            <p class="eyebrow">Capacité Supabase</p>
-            <h3>Plan ${escapeHtml(planName)}</h3>
-            <p>${formatNumber(capacity.totalUsers)} compte${capacity.totalUsers > 1 ? 's' : ''} créé${capacity.totalUsers > 1 ? 's' : ''} au total.</p>
+            <p class="eyebrow">Capacité et quotas</p>
+            <h3>Plans gratuits sous contrôle</h3>
+            <p>Supabase ${escapeHtml(supabasePlanName)} · Resend ${escapeHtml(emailPlanName)} · ${formatNumber(supabaseCapacity.totalUsers)} compte${supabaseCapacity.totalUsers > 1 ? 's' : ''}.</p>
           </div>
-          ${capacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(capacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Chiffres exacts Supabase</a>` : `<span class="pill info">Plan ${escapeHtml(planName)}</span>`}
+          <div class="capacity-links">
+            ${supabaseCapacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(supabaseCapacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Supabase</a>` : ''}
+            ${emailCapacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(emailCapacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Resend</a>` : ''}
+          </div>
         </div>
         <div class="quota-grid">
-          ${capacity.metrics.map(renderQuotaMetric).join('')}
+          ${[...supabaseCapacity.metrics, ...emailCapacity.metrics].map(renderQuotaMetric).join('')}
         </div>
         <p class="capacity-note">
-          Le quota MAU concerne les comptes qui se connectent ou renouvellent leur session pendant le cycle, pas le nombre total de comptes.
-          ${detailed ? 'L’estimation locale peut donc être inférieure au chiffre de facturation exact affiché par Supabase.' : 'Le détail exact reste disponible dans Supabase.'}
+          MAU : estimation locale sur 30 jours. E-mails : envois et réceptions suivis par webhook ; chaque destinataire compte pour une unité.
+          ${detailed ? 'Les pages d’utilisation Supabase et Resend restent la référence de facturation.' : ''}
         </p>
       </section>
     `;
@@ -1405,6 +1501,7 @@
         users: operations.users ?? {},
         database: operations.database ?? {},
         emails: operations.emails ?? {},
+        emailQuota: state.emailQuota,
         activity: operations.activity ?? {},
         automation: operations.automation ?? {},
       }));
@@ -1414,10 +1511,13 @@
     }
   }
 
-  function diagnosticText({ users, database, emails, activity, automation }) {
+  function diagnosticText({ users, database, emails, emailQuota, activity, automation }) {
     const capacity = getSupabaseCapacity({ users, database });
     const monthlyActiveUsers = capacity.metrics.find((metric) => metric.key === 'mau');
     const databaseUsage = capacity.metrics.find((metric) => metric.key === 'database');
+    const emailCapacity = getEmailCapacity(emailQuota);
+    const emailDaily = emailCapacity.metrics.find((metric) => metric.key === 'email-day');
+    const emailMonthly = emailCapacity.metrics.find((metric) => metric.key === 'email-month');
     return [
       '# RouteStop Admin — diagnostic',
       '',
@@ -1428,6 +1528,8 @@
       `- Aires centralisées : ${database.serviceAreaRows ?? 0}`,
       `- Tâches planifiées : ${automation.cronActive ?? 0}/${automation.cronTotal ?? 0}`,
       `- Tentatives de synchronisation échouées sur 24 h : ${automation.syncFailures24h ?? 0}`,
+      `- Quota e-mail du jour : ${emailDaily?.usedLabel ?? 0}/${emailDaily?.limitLabel ?? '—'} (${formatPercent(emailDaily?.percent ?? 0)})`,
+      `- Quota e-mail du mois : ${emailMonthly?.usedLabel ?? 0}/${emailMonthly?.limitLabel ?? '—'} (${formatPercent(emailMonthly?.percent ?? 0)})`,
       `- E-mails livrés sur 7 jours : ${emails.delivered7d ?? 0}`,
       `- E-mails en échec sur 7 jours : ${emails.failed7d ?? 0}`,
       `- Base : ${databaseUsage?.usedLabel ?? formatBytes(database.bytes ?? 0)}/${databaseUsage?.limitLabel ?? '—'} (${formatPercent(databaseUsage?.percent ?? 0)})`,

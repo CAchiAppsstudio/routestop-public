@@ -536,6 +536,12 @@ textarea:focus {
   text-decoration: none;
 }
 
+.capacity-links {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 .quota-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1203,6 +1209,15 @@ textarea:focus {
   .capacity-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .capacity-links {
+    width: 100%;
+  }
+
+  .capacity-links .capacity-link {
+    flex: 1;
+    text-align: center;
   }
 
   .toolbar {
