@@ -33,7 +33,7 @@
         Cette page explique simplement quelles données RouteStop utilise, pourquoi,
         avec qui elles sont traitées et comment garder le contrôle.
       </p>
-      <p class="meta">Version en vigueur : 18 août 2026</p>
+      <p class="meta">Version en vigueur : 29 août 2026</p>
     </section>
   </header>
 
@@ -47,6 +47,7 @@
       <a href="#conservation">Conservation</a>
       <a href="#securite">Sécurité</a>
       <a href="#droits">Vos droits</a>
+      <a href="#suppression">Suppression du compte</a>
       <a href="#site">Site public</a>
     </aside>
 
@@ -76,8 +77,10 @@
         </p>
         <p>
           La position précise de l’appareil est demandée uniquement lorsque vous utilisez
-          « Ma position », après autorisation iOS ou Android. RouteStop n’utilise ni
-          localisation en arrière-plan ni suivi continu.
+          « Ma position », après autorisation iOS ou Android. Cette permission du téléphone
+          est un contrôle technique distinct du consentement aux statistiques. La position
+          sert uniquement à exécuter la recherche demandée, n’est pas enregistrée dans la
+          base cloud RouteStop et n’est utilisée ni en arrière-plan ni pour un suivi continu.
         </p>
 
         <h3>Compte RouteStop</h3>
@@ -101,9 +104,10 @@
         <p>
           Les statistiques sont désactivées par défaut. Si vous les autorisez dans
           « Confidentialité &amp; support », RouteStop enregistre des interactions produit,
-          des caractéristiques agrégées du trajet et des zones approximatives arrondies à
-          0,1 degré. Aucune adresse exacte ni aucun identifiant de compte ne sont inclus.
-          Vous pouvez retirer votre accord à tout moment depuis le même écran.
+          des caractéristiques agrégées du trajet, des zones approximatives arrondies à
+          0,1 degré et, pour les aires consultées, leur identifiant, leur nom et leur enseigne.
+          Aucune adresse exacte, position GPS brute ni aucun identifiant de compte ne sont
+          inclus. Vous pouvez retirer votre accord à tout moment depuis le même écran.
         </p>
 
         <h3>Données techniques</h3>
@@ -112,6 +116,12 @@
           l’adresse IP, le type d’appareil ou des informations de sécurité nécessaires au
           fonctionnement, à la prévention des abus et au diagnostic d’incidents.
         </p>
+        <p>
+          Pour surveiller les e-mails opérationnels, la base RouteStop conserve uniquement
+          l’identifiant et le type de l’événement de livraison, l’identifiant technique de
+          l’e-mail, l’horodatage et l’unité de quota. Elle n’y conserve ni destinataire, ni
+          objet, ni contenu du message.
+        </p>
       </section>
 
       <section class="section" id="finalites">
@@ -119,15 +129,17 @@
         <ul>
           <li>
             <strong>Fournir le service demandé :</strong> rechercher un trajet, afficher les
-            aires, ouvrir une aire dans une app de navigation et gérer le compte.
+            aires, utiliser « Ma position », ouvrir une aire dans une app de navigation et
+            gérer le compte. La localisation est utilisée seulement lorsque cette fonction
+            est explicitement demandée et nécessaire à son exécution.
           </li>
           <li>
             <strong>Exécuter les fonctions du compte :</strong> synchroniser préférences,
             favoris, notes et signalements.
           </li>
           <li>
-            <strong>Consentement :</strong> utiliser la position de l’appareil et, séparément,
-            produire des statistiques d’usage sans identifiant de compte.
+            <strong>Consentement :</strong> produire des statistiques d’usage sans identifiant
+            de compte. Ce choix est distinct de la permission de localisation du téléphone.
           </li>
           <li>
             <strong>Intérêt légitime :</strong> sécuriser le service, prévenir les abus et
@@ -147,7 +159,7 @@
           à la fonction utilisée :
         </p>
         <ul>
-          <li><strong>Supabase</strong>, pour l’authentification et la base de données hébergée dans l’Union européenne ;</li>
+          <li><strong>Supabase</strong>, pour l’authentification et la base RouteStop hébergée dans l’Union européenne, en Irlande ;</li>
           <li><strong>Expo/EAS</strong>, pour distribuer les builds et mises à jour de l’application ;</li>
           <li><strong>Apple</strong>, si vous choisissez « Continuer avec Apple » ;</li>
           <li>
@@ -157,16 +169,23 @@
           </li>
           <li><strong>IGN Géoplateforme</strong>, ainsi qu’<strong>OpenStreetMap/Nominatim</strong> uniquement en secours, pour rechercher une adresse ou un lieu ;</li>
           <li><strong>OSRM</strong>, pour calculer l’itinéraire demandé ;</li>
-          <li><strong>CARTO</strong>, pour les fonds de carte, et Google pour certains visuels d’enseignes ;</li>
+          <li><strong>CARTO</strong>, pour les fonds de carte iPhone ;</li>
+          <li><strong>Google Maps Platform</strong>, pour afficher la carte Android, et Google pour certains visuels d’enseignes ;</li>
           <li>les opérateurs autoroutiers et sources publiques de prix, pour récupérer des données d’aires et de carburants ;</li>
           <li><strong>Waze, Google Maps ou Plans</strong>, uniquement lorsque vous décidez d’y ouvrir une aire ;</li>
-          <li>le fournisseur d’hébergement du site public et le service e-mail pour les demandes de support.</li>
+          <li><strong>OVHcloud</strong>, pour la boîte e-mail du support ;</li>
+          <li><strong>Resend</strong>, pour l’envoi d’alertes opérationnelles et le suivi technique de leur livraison ;</li>
+          <li><strong>GitHub Pages</strong>, pour l’hébergement du site public.</li>
         </ul>
         <p>
-          Certains prestataires peuvent traiter des données hors de l’Espace économique
-          européen selon leurs propres garanties contractuelles et politiques. RouteStop ne
-          vend pas vos données, n’intègre aucun SDK publicitaire et ne réalise aucun suivi
-          entre applications.
+          La base principale RouteStop est située dans l’Union européenne. Lorsque certains
+          prestataires traitent des données hors de l’Espace économique européen, ces flux
+          reposent, selon le cas, sur une décision d’adéquation, des clauses contractuelles
+          types de la Commission européenne et les accords de traitement des données du
+          prestataire. Les garanties applicables peuvent être demandées à
+          <a href="mailto:support@routestop.fr?subject=Transferts%20de%20donn%C3%A9es%20RouteStop">support@routestop.fr</a>.
+          RouteStop ne vend pas vos données, n’intègre aucun SDK publicitaire et ne réalise
+          aucun suivi entre applications.
         </p>
       </section>
 
@@ -177,6 +196,7 @@
           <li>favoris et notes : jusqu’à leur retrait ou la suppression du compte ;</li>
           <li>signalements : jusqu’à la suppression du compte, avec anonymisation des corrections déjà intégrées à la base publique ;</li>
           <li>statistiques d’usage sans identifiant de compte autorisées : 24 mois maximum, avec purge automatique ;</li>
+          <li>événements techniques de livraison d’e-mails opérationnels : 90 jours maximum, avec purge automatique ;</li>
           <li>historique local : cinq recherches maximum, jusqu’à son effacement, la suppression du compte ou la désinstallation ;</li>
           <li>échanges avec le support : trois ans maximum après le dernier échange, sauf obligation légale différente ;</li>
           <li>journaux techniques des prestataires : selon la durée nécessaire à la sécurité et leurs engagements respectifs.</li>
@@ -207,12 +227,9 @@
           un consentement à tout moment sans remettre en cause les traitements antérieurs.
         </p>
         <p>
-          La suppression définitive du compte est disponible dans l’application :
-          <strong>Mon compte → Confidentialité / Support → Supprimer mon compte</strong>.
-          Si le compte utilise Apple et que la révocation automatique n’est pas disponible,
-          l’application indique aussi comment retirer manuellement l’autorisation Apple.
-          Pour une autre demande, écrivez à l’adresse ci-dessous. Une réponse sera apportée
-          dans le délai légal, généralement un mois.
+          Pour une demande, écrivez à l’adresse ci-dessous. Une réponse sera apportée dans
+          le délai légal, généralement un mois. Une vérification d’identité limitée au
+          nécessaire peut être demandée en cas de doute raisonnable.
         </p>
         <div class="actions">
           <a class="button" href="mailto:support@routestop.fr?subject=Donn%C3%A9es%20personnelles%20RouteStop">
@@ -224,8 +241,29 @@
         </div>
       </section>
 
+      <section class="section" id="suppression">
+        <h2>8. Suppression du compte</h2>
+        <p>
+          La suppression définitive est disponible dans l’application :
+          <strong>Mon compte → Confidentialité / Support → Supprimer mon compte</strong>.
+          Elle peut aussi être demandée sans ouvrir l’application depuis la page
+          <a href="suppression-compte.html">Supprimer mon compte RouteStop</a>.
+        </p>
+        <p>
+          Le compte, le profil, les préférences, favoris, notes et signalements personnels
+          sont supprimés. Les corrections déjà intégrées à la base publique restent sans lien
+          avec le compte. Les statistiques facultatives ne contiennent aucun identifiant de
+          compte : elles ne peuvent donc pas être rattachées à une demande individuelle et
+          sont automatiquement supprimées au plus tard après 24 mois.
+        </p>
+        <p>
+          Si le compte utilise Apple et que la révocation automatique n’est pas disponible,
+          l’application indique aussi comment retirer manuellement l’autorisation Apple.
+        </p>
+      </section>
+
       <section class="section" id="site">
-        <h2>8. Site public et mises à jour</h2>
+        <h2>9. Site public et mises à jour</h2>
         <p>
           Les pages publiques RouteStop n’utilisent pas de cookie publicitaire ni de mesure
           d’audience propriétaire. L’hébergeur peut conserver des journaux de sécurité
@@ -238,7 +276,8 @@
 
   <footer class="shell footer">
     © 2026 RouteStop · Éditée sous la marque Cachi AppsStudio ·
-    <a href="support.html">Support</a>
+    <a href="support.html">Support</a> ·
+    <a href="suppression-compte.html">Supprimer mon compte</a>
   </footer>
 </body>
 </html>
