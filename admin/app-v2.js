@@ -429,7 +429,8 @@
       database: { bytes: operations.databaseBytes },
     };
     const latestSyncs = currentSyncRows(data.latestSyncs);
-    const syncErrors = latestSyncs.filter((item) => item.status === 'error');
+    const syncErrors = latestSyncs.filter((item) => item.status === 'error' && !isTransientSyncError(item));
+    const syncWarnings = latestSyncs.filter(isTransientSyncError);
     const syncPartials = latestSyncs.filter((item) => item.status === 'partial');
     const latestRelease = releaseData.latest;
     const releaseFailed = latestRelease && ['failed', 'rejected'].includes(latestRelease.status);
@@ -440,6 +441,7 @@
     const danger = syncErrors.length > 0 || releaseFailed || emailFailures > 0 || emailQuotaCritical;
     const warning = !danger && (
       syncPartials.length > 0
+      || syncWarnings.length > 0
       || Number(reportData.pending) > 0
       || Number(releaseData.active) > 0
       || (data.activeRuns ?? []).length > 0
@@ -519,7 +521,8 @@
     const releases = payload.releases ?? {};
     const operations = payload.operations ?? {};
     const latestSyncs = currentSyncRows(data.latestSyncs);
-    const errors = latestSyncs.filter((item) => item.status === 'error');
+    const errors = latestSyncs.filter((item) => item.status === 'error' && !isTransientSyncError(item));
+    const transientErrors = latestSyncs.filter(isTransientSyncError);
     const partials = latestSyncs.filter((item) => item.status === 'partial');
 
     if (Number(reports.pending) > 0) {
@@ -540,6 +543,15 @@
         text: 'Les anciennes données restent disponibles. Une relance est possible.',
         view: 'data',
         action: 'Vérifier',
+      });
+    } else if (transientErrors.length) {
+      tasks.push({
+        icon: '↻',
+        tone: 'warning',
+        title: `${transientErrors.length} zone${transientErrors.length > 1 ? 's' : ''} à relancer`,
+        text: 'La source publique a été trop lente. Une relance automatique est prévue sans supprimer les anciennes données.',
+        view: 'data',
+        action: 'Suivre',
       });
     } else if (partials.length) {
       tasks.push({
@@ -668,15 +680,16 @@
 
   function homeOsmRow(runs) {
     const successes = runs.filter((run) => run.status === 'success').length;
-    const errors = runs.filter((run) => run.status === 'error').length;
+    const errors = runs.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
+    const transientErrors = runs.filter(isTransientSyncError).length;
     const partials = runs.filter((run) => run.status === 'partial').length;
-    const tone = errors ? 'danger' : partials || successes < OSM_REGIONS.length ? 'warning' : 'success';
+    const tone = errors ? 'danger' : transientErrors || partials || successes < OSM_REGIONS.length ? 'warning' : 'success';
     const latest = [...runs].sort((a, b) => dateValue(b.finishedAt || b.startedAt) - dateValue(a.finishedAt || a.startedAt))[0];
     return `
       <div class="source-row">
         <span class="row-icon ${tone}">${tone === 'success' ? '✓' : '!'}</span>
         <div><strong>Restaurants et services</strong><p>${successes}/${OSM_REGIONS.length} zones vérifiées · ${latest ? relativeDate(latest.finishedAt || latest.startedAt) : 'jamais vérifiée'}</p></div>
-        <span class="pill ${tone}">${errors ? `${errors} échec${errors > 1 ? 's' : ''}` : tone === 'success' ? 'À jour' : 'À suivre'}</span>
+        <span class="pill ${tone}">${errors ? `${errors} échec${errors > 1 ? 's' : ''}` : transientErrors ? `${transientErrors} à relancer` : tone === 'success' ? 'À jour' : 'À suivre'}</span>
       </div>
     `;
   }
@@ -870,8 +883,9 @@
     const fuel = latest.find((run) => run.source === 'fuel_prices_gov');
     const official = latest.find((run) => run.source === 'service_areas_operator');
     const osmRuns = latest.filter((run) => run.source === 'service_areas_osm');
-    const currentFailures = latest.filter((run) => run.status === 'error').length;
+    const currentFailures = latest.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
     const currentPartials = latest.filter((run) => run.status === 'partial').length;
+    const currentRetries = latest.filter(isTransientSyncError).length;
     const activeRuns = recent.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
     const fuelActive = activeRuns.some((run) => run.source === 'fuel_prices_gov');
     const officialActive = activeRuns.some((run) => run.source === 'service_areas_operator');
@@ -882,7 +896,7 @@
         ${kpiCard('Prix carburant', counts.fuelPrices ?? 0, 'Lignes centralisées')}
         ${kpiCard('Aires', counts.serviceAreas ?? 0, 'Fiches centralisées')}
         ${kpiCard('Corrections actives', counts.activeOverrides ?? 0, 'Modifications admin')}
-        ${kpiCard('Sources à vérifier', currentFailures + currentPartials, `${currentFailures} en échec · ${currentPartials} partielle(s)`)}
+        ${kpiCard('Sources à vérifier', currentFailures + currentPartials + currentRetries, `${currentFailures} en échec · ${currentRetries} à relancer · ${currentPartials} partielle(s)`)}
       </section>
 
       <section class="source-grid">
@@ -945,7 +959,8 @@
 
   function renderOsmSyncCard(runs, active) {
     const successes = runs.filter((run) => run.status === 'success').length;
-    const errors = runs.filter((run) => run.status === 'error').length;
+    const errors = runs.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
+    const transientErrors = runs.filter(isTransientSyncError).length;
     const tone = errors ? 'danger' : successes === OSM_REGIONS.length ? 'success' : 'warning';
     return `
       <article class="source-card">
@@ -953,6 +968,7 @@
           <span class="pill ${tone}">${successes}/${OSM_REGIONS.length} zones à jour</span>
           <h3>Restaurants et services</h3>
           <p>Données OpenStreetMap vérifiées par zone.</p>
+          ${transientErrors ? `<p style="margin-top:8px">${transientErrors} zone${transientErrors > 1 ? 's' : ''} ${transientErrors > 1 ? 'seront relancées' : 'sera relancée'} automatiquement.</p>` : ''}
         </div>
         <div class="source-actions">
           <select id="osm-region" aria-label="Zone à mettre à jour">
@@ -965,7 +981,7 @@
   }
 
   function renderSyncHistory(run) {
-    const tone = syncTone(run.status);
+    const tone = syncRunTone(run);
     const label = run.source === 'service_areas_osm' && run.region
       ? REGION_LABELS[run.region] || run.region
       : syncSourceLabel(run.source);
@@ -1299,7 +1315,7 @@
     const usageUrl = safeExternalUrl(config.usageUrl);
     const homeSyncs = state.home?.data?.latestSyncs;
     const currentSyncFailures = Array.isArray(homeSyncs)
-      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error').length
+      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error' && !isTransientSyncError(run)).length
       : Number(automation.syncFailures24h) || 0;
     const emailCapacity = getEmailCapacity(state.emailQuota);
     const emailDaily = emailCapacity.metrics.find((metric) => metric.key === 'email-day');
@@ -1639,6 +1655,20 @@
     return 'muted';
   }
 
+  function isTransientSyncMessage(message) {
+    return /timeout|timed out|aborted|http 429|http 502|http 503|http 504|overpass/i.test(String(message || ''));
+  }
+
+  function isTransientSyncError(run) {
+    return run?.source === 'service_areas_osm'
+      && run?.status === 'error'
+      && isTransientSyncMessage(run.message);
+  }
+
+  function syncRunTone(run) {
+    return isTransientSyncError(run) ? 'warning' : syncTone(run?.status);
+  }
+
   function reportStatusTone(status) {
     if (status === 'reviewed') return 'success';
     if (status === 'rejected') return 'danger';
@@ -1647,7 +1677,7 @@
 
   function friendlySyncError(message) {
     const value = String(message || '').toLowerCase();
-    if (/timeout|timed out|aborted|http 504|http 502|http 503/.test(value)) {
+    if (isTransientSyncMessage(value)) {
       return 'La source publique n’a pas répondu à temps. Les données précédentes restent disponibles.';
     }
     if (/no_motorway_geometry/.test(value)) return 'Aucune autoroute reconnue dans cette zone.';
