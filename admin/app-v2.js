@@ -70,6 +70,7 @@
     home: null,
     reports: [],
     data: null,
+    fuelLinkCandidates: null,
     overrides: [],
     releases: [],
     analytics: null,
@@ -91,6 +92,8 @@
   let activeView = 'home';
   let statusFilter = 'pending';
   let search = '';
+  let fuelLinkFilter = 'all';
+  let fuelLinkSearch = '';
   let realtimeChannel = null;
   let realtimeTimer = null;
   let activePoll = null;
@@ -258,6 +261,7 @@
     $('home-view').addEventListener('click', handleNavigationAction);
     $('actions-view').addEventListener('click', handleReportAction);
     $('data-view').addEventListener('click', handleDataAction);
+    $('data-view').addEventListener('input', handleDataInput);
     $('releases-view').addEventListener('click', handleReleaseAction);
     $('stats-view').addEventListener('click', handleStatsAction);
     $('maintenance-view').addEventListener('click', handleMaintenanceAction);
@@ -267,12 +271,15 @@
     state.home = null;
     state.reports = [];
     state.data = null;
+    state.fuelLinkCandidates = null;
     state.overrides = [];
     state.releases = [];
     state.analytics = null;
     state.operations = null;
     state.emailQuota = null;
     state.bulkSync = { active: false, completed: 0, total: 0, region: null };
+    fuelLinkFilter = 'all';
+    fuelLinkSearch = '';
     state.loaded.clear();
     state.loading.clear();
   }
@@ -336,6 +343,12 @@
     return data;
   }
 
+  async function queryOptional(promise, fallback) {
+    const { data, error } = await promise;
+    if (error) return fallback;
+    return data ?? fallback;
+  }
+
   async function loadView(view, force = false) {
     if (!client || !session || state.loading.has(view)) return;
     if (state.loaded.has(view) && !force) {
@@ -365,16 +378,21 @@
           .order('created_at', { ascending: false })
           .limit(250)) ?? [];
       } else if (view === 'data') {
-        const [data, overrides] = await Promise.all([
+        const [data, overrides, fuelLinkCandidates] = await Promise.all([
           query(client.rpc('admin_data_v2')),
           query(client
             .from('station_overrides')
             .select('id, station_id, station_name, station_brand, brand_override, fuels, services_add, services_remove, tenants_add, tenants_remove, hidden, note, is_active, updated_at')
             .order('updated_at', { ascending: false })
             .limit(200)),
+          queryOptional(
+            client.rpc('admin_fuel_link_candidates_v1'),
+            { unavailable: true, summary: {}, candidates: [] },
+          ),
         ]);
         state.data = data;
         state.overrides = overrides ?? [];
+        state.fuelLinkCandidates = fuelLinkCandidates;
       } else if (view === 'releases') {
         state.releases = await query(client
           .from('app_release_runs')
@@ -938,6 +956,8 @@
         ${renderOsmSyncCard(osmRuns, osmActive, actionableRuns)}
       </section>
 
+      ${renderFuelLinkCandidatePanel()}
+
       <section class="section-grid">
         <details class="card wide-card data-details" id="osm-zone-status">
           <summary>
@@ -993,6 +1013,179 @@
         </article>
       </section>
     `;
+    applyFuelCandidateFilters();
+  }
+
+  function fuelCandidateCategory(candidate) {
+    if (candidate.distanceM == null || candidate.distanceM === '') return 'far';
+    const distance = Number(candidate.distanceM);
+    if (!Number.isFinite(distance) || distance > 1000) return 'far';
+    if (distance <= 150) return 'close';
+    return 'review';
+  }
+
+  function fuelCandidateTone(category) {
+    if (category === 'close') return 'success';
+    if (category === 'review') return 'warning';
+    return 'muted';
+  }
+
+  function fuelCandidateLabel(category) {
+    if (category === 'close') return 'Très proche';
+    if (category === 'review') return 'À vérifier';
+    return 'Aire à identifier';
+  }
+
+  function formatCandidateDistance(value) {
+    if (value == null || value === '') return 'Distance inconnue';
+    const distance = Number(value);
+    if (!Number.isFinite(distance)) return 'Distance inconnue';
+    if (distance >= 1000) return `${(distance / 1000).toFixed(distance >= 10000 ? 0 : 1)} km`;
+    return `${Math.round(distance)} m`;
+  }
+
+  function renderFuelPrices(fuels) {
+    const entries = Object.entries(fuels ?? {})
+      .filter(([, price]) => Number.isFinite(Number(price)))
+      .sort(([left], [right]) => left.localeCompare(right, 'fr'));
+    if (!entries.length) return '<span class="pill muted">Prix indisponible</span>';
+    return entries.map(([fuel, price]) => `
+      <span class="fuel-price-chip"><strong>${escapeHtml(fuel)}</strong>${Number(price).toFixed(3)} €</span>
+    `).join('');
+  }
+
+  function renderFuelLinkAlternative(area, index) {
+    const distance = formatCandidateDistance(area.distanceM);
+    const route = [area.highway, area.direction].filter(Boolean).join(' · ');
+    return `
+      <div class="fuel-alternative ${index === 0 ? 'primary' : ''}">
+        <span>${index === 0 ? 'Aire la plus proche' : `Alternative ${index + 1}`}</span>
+        <strong>${escapeHtml(area.areaName || 'Nom d’aire indisponible')}</strong>
+        <p>${escapeHtml(route || area.operatorSource || 'Autoroute et sens à vérifier')} · ${escapeHtml(distance)}</p>
+      </div>
+    `;
+  }
+
+  function renderFuelLinkCandidate(candidate) {
+    const category = fuelCandidateCategory(candidate);
+    const alternatives = Array.isArray(candidate.alternatives) ? candidate.alternatives : [];
+    const best = alternatives[0] ?? {
+      areaId: candidate.areaId,
+      areaName: candidate.areaName,
+      highway: candidate.highway,
+      direction: candidate.direction,
+      operatorSource: candidate.operatorSource,
+      distanceM: candidate.distanceM,
+    };
+    const stationTitle = candidate.city || candidate.address || `Station ${candidate.stationId}`;
+    const route = [best.highway, best.direction].filter(Boolean).join(' · ');
+    const searchable = [
+      candidate.stationId, candidate.address, candidate.city, candidate.department, candidate.region,
+      best.areaId, best.areaName, best.highway, best.direction, best.operatorSource,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    return `
+      <article class="fuel-candidate-row" data-fuel-candidate data-category="${category}" data-search="${escapeHtml(searchable)}">
+        <div class="fuel-candidate-station">
+          <span class="pill ${fuelCandidateTone(category)}">${escapeHtml(fuelCandidateLabel(category))} · ${escapeHtml(formatCandidateDistance(candidate.distanceM))}</span>
+          <strong>${escapeHtml(stationTitle)}</strong>
+          <p>Station officielle ${escapeHtml(candidate.stationId)}${candidate.department ? ` · ${escapeHtml(candidate.department)}` : ''}</p>
+        </div>
+        <span class="fuel-candidate-arrow" aria-hidden="true">→</span>
+        <div class="fuel-candidate-area">
+          <span>Aire proposée, non validée</span>
+          <strong>${escapeHtml(best.areaName || 'Aire à identifier')}</strong>
+          <p>${escapeHtml(route || best.operatorSource || 'Autoroute et sens à vérifier')}</p>
+        </div>
+        <details class="fuel-candidate-details">
+          <summary>Voir les éléments de comparaison</summary>
+          <div class="fuel-candidate-detail-grid">
+            <div>
+              <span class="detail-label">Prix officiels disponibles</span>
+              <div class="fuel-price-list">${renderFuelPrices(candidate.fuels)}</div>
+              <p class="fuel-address">${escapeHtml(candidate.address || 'Adresse officielle indisponible')}${candidate.region ? ` · ${escapeHtml(candidate.region)}` : ''}</p>
+            </div>
+            <div class="fuel-alternatives">
+              ${alternatives.length ? alternatives.map(renderFuelLinkAlternative).join('') : '<p>Aucune fiche d’aire suffisamment proche n’a été trouvée.</p>'}
+            </div>
+          </div>
+          <p class="fuel-candidate-warning">Lecture seule : la proximité ne prouve ni le bon sens de circulation ni l’appartenance à la même aire.</p>
+        </details>
+      </article>
+    `;
+  }
+
+  function renderFuelLinkCandidatePanel() {
+    const payload = state.fuelLinkCandidates;
+    if (!payload || payload.unavailable) {
+      return `
+        <section class="fuel-link-panel">
+          <div class="fuel-link-head">
+            <div><p class="eyebrow">Couverture carburant</p><h3>Correspondances à vérifier</h3><p>Cette analyse en lecture seule n’est pas encore disponible. Le reste de l’administration continue de fonctionner normalement.</p></div>
+            <span class="pill muted">Indisponible</span>
+          </div>
+        </section>
+      `;
+    }
+
+    const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    const summary = payload.summary ?? {};
+    const closeCount = Number(summary.within150m) || candidates.filter((item) => fuelCandidateCategory(item) === 'close').length;
+    const reviewCount = (Number(summary.between151And500m) || 0) + (Number(summary.between501And1000m) || 0)
+      || candidates.filter((item) => fuelCandidateCategory(item) === 'review').length;
+    const farCount = Number(summary.over1000m) || candidates.filter((item) => fuelCandidateCategory(item) === 'far').length;
+
+    return `
+      <section class="fuel-link-panel" id="fuel-link-candidates">
+        <div class="fuel-link-head">
+          <div>
+            <p class="eyebrow">Couverture carburant</p>
+            <h3>Correspondances à vérifier</h3>
+            <p>${formatNumber(candidates.length)} stations officielles avec prix ne sont pas encore reliées exactement à une fiche d’aire. Cette liste ne modifie aucune donnée.</p>
+          </div>
+          <span class="pill info">Lecture seule</span>
+        </div>
+        <div class="fuel-link-summary">
+          <div><span>Très proches</span><strong>${formatNumber(closeCount)}</strong><small>0 à 150 m</small></div>
+          <div><span>À vérifier</span><strong>${formatNumber(reviewCount)}</strong><small>151 m à 1 km</small></div>
+          <div><span>Aire à identifier</span><strong>${formatNumber(farCount)}</strong><small>Plus de 1 km</small></div>
+        </div>
+        <div class="fuel-link-toolbar">
+          <div class="filter-tabs" role="group" aria-label="Filtrer les correspondances">
+            <button class="${fuelLinkFilter === 'all' ? 'active' : ''}" data-fuel-link-filter="all" type="button">Toutes</button>
+            <button class="${fuelLinkFilter === 'close' ? 'active' : ''}" data-fuel-link-filter="close" type="button">Très proches</button>
+            <button class="${fuelLinkFilter === 'review' ? 'active' : ''}" data-fuel-link-filter="review" type="button">À vérifier</button>
+            <button class="${fuelLinkFilter === 'far' ? 'active' : ''}" data-fuel-link-filter="far" type="button">Éloignées</button>
+          </div>
+          <label class="fuel-link-search">Rechercher<input data-fuel-link-search value="${escapeHtml(fuelLinkSearch)}" placeholder="Ville, aire, A6, identifiant…" /></label>
+        </div>
+        <div class="fuel-link-result-line"><strong id="fuel-candidate-visible">${formatNumber(candidates.length)} correspondances affichées</strong><span>Aucune validation automatique</span></div>
+        <div class="fuel-candidate-list">
+          ${candidates.length ? candidates.map(renderFuelLinkCandidate).join('') : emptyInline('Toutes les stations officielles sont déjà reliées.')}
+        </div>
+      </section>
+    `;
+  }
+
+  function applyFuelCandidateFilters() {
+    const rows = Array.from(document.querySelectorAll('[data-fuel-candidate]'));
+    if (!rows.length) return;
+    let visible = 0;
+    for (const row of rows) {
+      const matchesCategory = fuelLinkFilter === 'all' || row.dataset.category === fuelLinkFilter;
+      const matchesSearch = !fuelLinkSearch || (row.dataset.search || '').includes(fuelLinkSearch);
+      const show = matchesCategory && matchesSearch;
+      row.classList.toggle('hidden', !show);
+      if (show) visible += 1;
+    }
+    setText('fuel-candidate-visible', `${formatNumber(visible)} correspondance${visible > 1 ? 's' : ''} affichée${visible > 1 ? 's' : ''}`);
+  }
+
+  function handleDataInput(event) {
+    const searchInput = event.target.closest('[data-fuel-link-search]');
+    if (!searchInput) return;
+    fuelLinkSearch = searchInput.value.trim().toLowerCase();
+    applyFuelCandidateFilters();
   }
 
   function renderDataActionPanel(actionableRuns, automaticRetries) {
@@ -1155,6 +1348,15 @@
   }
 
   async function handleDataAction(event) {
+    const filterButton = event.target.closest('button[data-fuel-link-filter]');
+    if (filterButton) {
+      fuelLinkFilter = filterButton.dataset.fuelLinkFilter || 'all';
+      document.querySelectorAll('button[data-fuel-link-filter]').forEach((button) => {
+        button.classList.toggle('active', button === filterButton);
+      });
+      applyFuelCandidateFilters();
+      return;
+    }
     const showZonesButton = event.target.closest('button[data-show-zones]');
     if (showZonesButton) {
       const details = $('osm-zone-status');
