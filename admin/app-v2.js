@@ -908,7 +908,13 @@
       <section class="kpi-grid">
         ${kpiCard('Actions requises', actionableRuns.length, actionableRuns.length ? 'À relancer ci-dessous' : 'Aucune intervention')}
         ${kpiCard('Zones de services à jour', `${osmSuccesses}/${OSM_REGIONS.length}`, automaticRetries.length ? `${automaticRetries.length} relance${automaticRetries.length > 1 ? 's' : ''} automatique${automaticRetries.length > 1 ? 's' : ''} prévue${automaticRetries.length > 1 ? 's' : ''}` : 'Restaurants et services')}
-        ${kpiCard('Stations avec prix disponible', counts.fuelPrices ?? 0, 'Source officielle des prix')}
+        ${kpiCard(
+          'Stations avec prix disponible',
+          counts.fuelPrices ?? 0,
+          counts.fuelPriceRows != null
+            ? `${formatNumber(counts.fuelPrices ?? 0)} exploitables sur ${formatNumber(counts.fuelPriceRows)} lignes reçues`
+            : 'Source officielle des prix',
+        )}
         ${kpiCard('Corrections actives', counts.activeOverrides ?? 0, 'Modifications admin')}
       </section>
 
@@ -962,17 +968,17 @@
             <article>
               <span>Fiches techniques d’aires</span>
               <strong>${formatNumber(counts.serviceAreas ?? 0)}</strong>
-              <p>Enregistrements issus de plusieurs sources, parfois séparés par sens. Ce nombre ne représente pas des aires physiques uniques.</p>
+              <p>${formatNumber(counts.serviceAreasFuelSignal ?? 0)} avec carburant · ${formatNumber(counts.serviceAreasWithoutFuelSignal ?? 0)} sans carburant. Les fiches sont parfois séparées par sens et ne représentent pas des aires physiques uniques.</p>
             </article>
             <article>
-              <span>Stations avec prix disponible</span>
+              <span>Stations officielles avec prix</span>
               <strong>${formatNumber(counts.fuelPrices ?? 0)}</strong>
-              <p>Une ligne par station ayant au moins un prix officiel exploitable. Ce volume n’est pas comparable au nombre de fiches techniques d’aires.</p>
+              <p>${formatNumber(counts.fuelPriceRows ?? counts.fuelPrices ?? 0)} lignes reçues, dont ${formatNumber(counts.fuelPrices ?? 0)} contiennent au moins un prix officiel exploitable.</p>
             </article>
             <article>
-              <span>Aires physiques uniques</span>
-              <strong>Non calculé</strong>
-              <p>Le chiffre ne sera affiché qu’après un regroupement fiable des sources, des sens de circulation et des identifiants officiels.</p>
+              <span>Aires reliées exactement aux prix</span>
+              <strong>${formatNumber(counts.serviceAreasMatchedFuelPrice ?? 0)}</strong>
+              <p>${formatNumber(counts.serviceAreasLinkedFuel ?? 0)} fiches possèdent un identifiant de station ; ${formatNumber(counts.serviceAreasMatchedFuelPrice ?? 0)} retrouvent actuellement une station avec un prix exploitable.</p>
             </article>
           </div>
         </details>
