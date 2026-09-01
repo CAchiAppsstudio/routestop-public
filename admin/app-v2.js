@@ -60,8 +60,11 @@
     },
   };
   const RESEND_USAGE_URL = 'https://resend.com/settings/usage';
+  const EXPO_BUILDS_URL = 'https://expo.dev/accounts/cachiappsstudio/projects/routestop/builds';
   const QUOTA_WARNING_PERCENT = 70;
   const QUOTA_DANGER_PERCENT = 90;
+  const SYNC_POLL_INTERVAL_MS = 10000;
+  const SYNC_WAIT_TIMEOUT_MS = 180000;
 
   const state = {
     home: null,
@@ -73,6 +76,12 @@
     analyticsDays: 30,
     operations: null,
     emailQuota: null,
+    bulkSync: {
+      active: false,
+      completed: 0,
+      total: 0,
+      region: null,
+    },
     loaded: new Set(),
     loading: new Set(),
   };
@@ -263,6 +272,7 @@
     state.analytics = null;
     state.operations = null;
     state.emailQuota = null;
+    state.bulkSync = { active: false, completed: 0, total: 0, region: null };
     state.loaded.clear();
     state.loading.clear();
   }
@@ -429,8 +439,11 @@
       database: { bytes: operations.databaseBytes },
     };
     const latestSyncs = currentSyncRows(data.latestSyncs);
-    const syncErrors = latestSyncs.filter((item) => item.status === 'error' && !isTransientSyncError(item));
-    const syncWarnings = latestSyncs.filter(isTransientSyncError);
+    const osmSyncs = latestSyncs.filter((item) => item.source === 'service_areas_osm');
+    const osmSuccesses = osmSyncs.filter((item) => item.status === 'success').length;
+    const dataActions = latestSyncs.filter(isActionableDataRun);
+    const syncErrors = latestSyncs.filter((item) => item.status === 'error' && !isAutomaticRetryPending(item));
+    const syncWarnings = latestSyncs.filter(isAutomaticRetryPending);
     const syncPartials = latestSyncs.filter((item) => item.status === 'partial');
     const latestRelease = releaseData.latest;
     const releaseFailed = latestRelease && ['failed', 'rejected'].includes(latestRelease.status);
@@ -476,7 +489,7 @@
         ${kpiCard('À traiter', pendingCount, pendingCount ? 'Action requise' : 'File vide')}
         ${kpiCard('Recherches sur 7 jours', activity.routeSearches7d ?? 0, `${activity.routeSearches24h ?? 0} sur 24 h`)}
         ${kpiCard('Comptes inscrits', activity.usersTotal ?? 0, `${activity.activeUsers7d ?? 0} actifs sur 7 jours`)}
-        ${kpiCard('Aires en base', data.serviceAreaRows ?? 0, `${data.fuelPriceRows ?? 0} prix carburant`)}
+        ${kpiCard('Zones de services', `${osmSuccesses}/${OSM_REGIONS.length}`, dataActions.length ? `${dataActions.length} action${dataActions.length > 1 ? 's' : ''} requise${dataActions.length > 1 ? 's' : ''}` : 'Aucune intervention')}
       </section>
 
       ${renderPlanCapacity(capacityOperations, state.emailQuota)}
@@ -511,7 +524,7 @@
   }
 
   function kpiCard(label, value, detail) {
-    return `<article class="kpi-card"><span>${escapeHtml(label)}</span><strong>${formatNumber(value)}</strong><small>${escapeHtml(detail)}</small></article>`;
+    return `<article class="kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatNumberOrText(value))}</strong><small>${escapeHtml(detail)}</small></article>`;
   }
 
   function buildHomeTasks(payload) {
@@ -521,8 +534,8 @@
     const releases = payload.releases ?? {};
     const operations = payload.operations ?? {};
     const latestSyncs = currentSyncRows(data.latestSyncs);
-    const errors = latestSyncs.filter((item) => item.status === 'error' && !isTransientSyncError(item));
-    const transientErrors = latestSyncs.filter(isTransientSyncError);
+    const errors = latestSyncs.filter((item) => item.status === 'error' && !isAutomaticRetryPending(item));
+    const transientErrors = latestSyncs.filter(isAutomaticRetryPending);
     const partials = latestSyncs.filter((item) => item.status === 'partial');
 
     if (Number(reports.pending) > 0) {
@@ -587,7 +600,7 @@
         icon: '↑',
         tone: '',
         title: 'Version en cours de traitement',
-        text: releaseStatusLabel(releases.latest.status),
+        text: releaseStatusText(releases.latest),
         view: 'releases',
         action: 'Suivre',
       });
@@ -650,8 +663,8 @@
     return `
       <div class="compact-row">
         <span class="row-icon ${tone}">↑</span>
-        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(release.message || releaseStatusLabel(release.status))} · ${escapeHtml(relativeDate(release.updatedAt))}</p></div>
-        <span class="pill ${tone}">${escapeHtml(releaseStatusLabel(release.status))}</span>
+        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(release.message || releaseStatusText(release))} · ${escapeHtml(relativeDate(release.updatedAt))}</p></div>
+        <span class="pill ${tone}">${escapeHtml(releaseStatusText(release))}</span>
       </div>
     `;
   }
@@ -668,20 +681,20 @@
   }
 
   function homeSourceRow(title, run, detail) {
-    const tone = syncTone(run?.status);
+    const tone = syncRunTone(run);
     return `
       <div class="source-row">
         <span class="row-icon ${tone}">${run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
         <div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)} · ${run ? relativeDate(run.finishedAt || run.startedAt || run.requestedAt) : 'jamais vérifiée'}</p></div>
-        <span class="pill ${tone}">${escapeHtml(syncStatusLabel(run?.status))}</span>
+        <span class="pill ${tone}">${escapeHtml(syncRunStatusLabel(run))}</span>
       </div>
     `;
   }
 
   function homeOsmRow(runs) {
     const successes = runs.filter((run) => run.status === 'success').length;
-    const errors = runs.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
-    const transientErrors = runs.filter(isTransientSyncError).length;
+    const errors = runs.filter((run) => run.status === 'error' && !isAutomaticRetryPending(run)).length;
+    const transientErrors = runs.filter(isAutomaticRetryPending).length;
     const partials = runs.filter((run) => run.status === 'partial').length;
     const tone = errors ? 'danger' : transientErrors || partials || successes < OSM_REGIONS.length ? 'warning' : 'success';
     const latest = [...runs].sort((a, b) => dateValue(b.finishedAt || b.startedAt) - dateValue(a.finishedAt || a.startedAt))[0];
@@ -883,21 +896,23 @@
     const fuel = latest.find((run) => run.source === 'fuel_prices_gov');
     const official = latest.find((run) => run.source === 'service_areas_operator');
     const osmRuns = latest.filter((run) => run.source === 'service_areas_osm');
-    const currentFailures = latest.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
-    const currentPartials = latest.filter((run) => run.status === 'partial').length;
-    const currentRetries = latest.filter(isTransientSyncError).length;
     const activeRuns = recent.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
+    const actionableRuns = latest.filter((run) => isActionableDataRun(run) && !isMatchingSyncActive(run, activeRuns));
+    const automaticRetries = latest.filter((run) => isAutomaticRetryPending(run) && !isMatchingSyncActive(run, activeRuns));
+    const osmSuccesses = osmRuns.filter((run) => run.status === 'success').length;
     const fuelActive = activeRuns.some((run) => run.source === 'fuel_prices_gov');
     const officialActive = activeRuns.some((run) => run.source === 'service_areas_operator');
     const osmActive = activeRuns.some((run) => run.source === 'service_areas_osm');
 
     $('data-view').innerHTML = `
       <section class="kpi-grid">
-        ${kpiCard('Prix carburant', counts.fuelPrices ?? 0, 'Lignes centralisées')}
-        ${kpiCard('Aires', counts.serviceAreas ?? 0, 'Fiches centralisées')}
+        ${kpiCard('Actions requises', actionableRuns.length, actionableRuns.length ? 'À relancer ci-dessous' : 'Aucune intervention')}
+        ${kpiCard('Zones de services à jour', `${osmSuccesses}/${OSM_REGIONS.length}`, automaticRetries.length ? `${automaticRetries.length} relance${automaticRetries.length > 1 ? 's' : ''} automatique${automaticRetries.length > 1 ? 's' : ''} prévue${automaticRetries.length > 1 ? 's' : ''}` : 'Restaurants et services')}
+        ${kpiCard('Stations avec prix disponible', counts.fuelPrices ?? 0, 'Source officielle des prix')}
         ${kpiCard('Corrections actives', counts.activeOverrides ?? 0, 'Modifications admin')}
-        ${kpiCard('Sources à vérifier', currentFailures + currentPartials + currentRetries, `${currentFailures} en échec · ${currentRetries} à relancer · ${currentPartials} partielle(s)`)}
       </section>
+
+      ${renderDataActionPanel(actionableRuns, automaticRetries)}
 
       <section class="source-grid">
         ${renderSyncCard({
@@ -914,18 +929,53 @@
           target: 'service_areas',
           active: officialActive,
         })}
-        ${renderOsmSyncCard(osmRuns, osmActive)}
+        ${renderOsmSyncCard(osmRuns, osmActive, actionableRuns)}
       </section>
 
       <section class="section-grid">
-        <article class="card wide-card">
-          <div class="card-head">
-            <div><h3>Historique récent</h3><p>Les demandes manuelles et les tâches planifiées sont distinguées.</p></div>
+        <details class="card wide-card data-details" id="osm-zone-status">
+          <summary>
+            <div><strong>État des 14 zones</strong><p>Consulte ou actualise directement une zone précise.</p></div>
+            <span class="pill ${actionableRuns.some((run) => run.source === 'service_areas_osm') ? 'danger' : automaticRetries.length ? 'warning' : 'success'}">${osmSuccesses}/${OSM_REGIONS.length} à jour</span>
+          </summary>
+          <div class="zone-list data-details-body">
+            ${OSM_REGIONS.map((region) => renderOsmZoneRow(region, osmRuns, activeRuns)).join('')}
           </div>
-          <div class="history-list">
+        </details>
+
+        <details class="card wide-card data-details">
+          <summary>
+            <div><strong>Historique technique</strong><p>Demandes manuelles, tâches planifiées et relances.</p></div>
+            <span class="pill muted">${Math.min(recent.length, 24)} résultats</span>
+          </summary>
+          <div class="history-list data-details-body">
             ${recent.length ? recent.slice(0, 24).map(renderSyncHistory).join('') : emptyInline('Aucune synchronisation enregistrée.')}
           </div>
-        </article>
+        </details>
+
+        <details class="card wide-card data-details">
+          <summary>
+            <div><strong>Comprendre les chiffres</strong><p>Définitions des volumes techniques affichés dans l’administration.</p></div>
+            <span class="pill muted">Définitions</span>
+          </summary>
+          <div class="data-definition-grid data-details-body">
+            <article>
+              <span>Fiches techniques d’aires</span>
+              <strong>${formatNumber(counts.serviceAreas ?? 0)}</strong>
+              <p>Enregistrements issus de plusieurs sources, parfois séparés par sens. Ce nombre ne représente pas des aires physiques uniques.</p>
+            </article>
+            <article>
+              <span>Stations avec prix disponible</span>
+              <strong>${formatNumber(counts.fuelPrices ?? 0)}</strong>
+              <p>Une ligne par station ayant au moins un prix officiel exploitable. Ce volume n’est pas comparable au nombre de fiches techniques d’aires.</p>
+            </article>
+            <article>
+              <span>Aires physiques uniques</span>
+              <strong>Non calculé</strong>
+              <p>Le chiffre ne sera affiché qu’après un regroupement fiable des sources, des sens de circulation et des identifiants officiels.</p>
+            </article>
+          </div>
+        </details>
 
         <article class="card wide-card">
           <details ${state.overrides.length && state.overrides.length <= 5 ? 'open' : ''}>
@@ -939,44 +989,121 @@
     `;
   }
 
+  function renderDataActionPanel(actionableRuns, automaticRetries) {
+    const actionableOsmRuns = actionableRuns.filter((run) => run.source === 'service_areas_osm' && run.region);
+    const bulk = state.bulkSync;
+    const tone = actionableRuns.length ? 'danger' : automaticRetries.length ? 'warning' : 'success';
+    const title = bulk.active
+      ? `Relance progressive ${bulk.completed}/${bulk.total}`
+      : actionableRuns.length ? `${actionableRuns.length} action${actionableRuns.length > 1 ? 's' : ''} requise${actionableRuns.length > 1 ? 's' : ''}`
+        : automaticRetries.length ? 'Relance automatique prévue' : 'Aucune action requise';
+    const detail = bulk.active
+      ? `${REGION_LABELS[bulk.region] || 'Zone'} est en cours. La zone suivante attendra la fin de celle-ci. Garde cette page ouverte.`
+      : actionableRuns.length ? 'Les anciennes données restent disponibles pendant la relance.'
+        : automaticRetries.length ? 'La source publique sera retentée automatiquement. Aucune manipulation nécessaire.'
+          : 'Toutes les sources sont utilisables. Les données techniques restent accessibles plus bas.';
+
+    return `
+      <section class="data-action-panel ${tone}">
+        <div class="data-action-head">
+          <div>
+            <p class="eyebrow">À traiter maintenant</p>
+            <h3>${escapeHtml(title)}</h3>
+            <p>${escapeHtml(detail)}</p>
+          </div>
+          ${actionableOsmRuns.length > 1 || bulk.active ? `
+            <button class="${bulk.active ? 'ghost' : ''}" data-sync-all-regions type="button" ${bulk.active ? 'disabled' : ''}>
+              ${bulk.active ? `${bulk.completed}/${bulk.total} zones` : `Relancer les ${actionableOsmRuns.length} zones`}
+            </button>
+          ` : ''}
+        </div>
+        <div class="data-action-list">
+          ${actionableRuns.map((run) => renderDataActionRow(run, false)).join('')}
+          ${automaticRetries.map((run) => renderDataActionRow(run, true)).join('')}
+          ${!actionableRuns.length && !automaticRetries.length ? '<div class="data-clear-state"><span>✓</span><p>Rien à chercher dans l’historique : aucune relance manuelle n’est nécessaire.</p></div>' : ''}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDataActionRow(run, automatic) {
+    const target = syncTargetForRun(run);
+    const label = run.source === 'service_areas_osm' && run.region
+      ? REGION_LABELS[run.region] || run.region
+      : syncSourceLabel(run.source);
+    const tone = automatic ? 'warning' : 'danger';
+    const status = automatic ? 'Relance prévue' : dataActionLabel(run);
+    const message = run.message
+      ? friendlySyncError(run.message)
+      : run.status === 'partial' ? 'La mise à jour est incomplète. Les données précédentes restent disponibles.'
+        : 'La mise à jour doit être relancée.';
+    return `
+      <div class="data-action-row">
+        <span class="row-icon ${tone}">${automatic ? '↻' : '!'}</span>
+        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(message)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p></div>
+        <span class="pill ${tone}">${escapeHtml(status)}</span>
+        ${automatic ? '<span class="data-action-wait">Automatique</span>' : `
+          <button class="ghost small" data-sync-target="${escapeHtml(target)}" ${run.region ? `data-sync-region="${escapeHtml(run.region)}"` : ''} type="button" ${state.bulkSync.active ? 'disabled' : ''}>Relancer</button>
+        `}
+      </div>
+    `;
+  }
+
   function renderSyncCard({ title, description, run, target, active }) {
-    const tone = syncTone(run?.status);
+    const tone = syncRunTone(run);
     return `
       <article class="source-card">
         <div>
-          <span class="pill ${tone}">${escapeHtml(active ? 'En cours' : syncStatusLabel(run?.status))}</span>
+          <span class="pill ${tone}">${escapeHtml(active ? 'En cours' : syncRunStatusLabel(run))}</span>
           <h3>${escapeHtml(title)}</h3>
           <p>${escapeHtml(description)}</p>
           <p style="margin-top:8px">${run ? `Dernier résultat ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}` : 'Aucun résultat enregistré.'}</p>
           ${run?.message ? `<p style="margin-top:6px;color:var(--red)">${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
         </div>
         <div class="source-actions">
-          <button data-sync-target="${escapeHtml(target)}" type="button" ${active ? 'disabled' : ''}>${active ? 'Mise à jour en cours…' : 'Mettre à jour'}</button>
+          <button data-sync-target="${escapeHtml(target)}" type="button" ${active || state.bulkSync.active ? 'disabled' : ''}>${active ? 'Mise à jour en cours…' : 'Actualiser maintenant'}</button>
         </div>
       </article>
     `;
   }
 
-  function renderOsmSyncCard(runs, active) {
+  function renderOsmSyncCard(runs, active, actionableRuns) {
     const successes = runs.filter((run) => run.status === 'success').length;
-    const errors = runs.filter((run) => run.status === 'error' && !isTransientSyncError(run)).length;
-    const transientErrors = runs.filter(isTransientSyncError).length;
-    const tone = errors ? 'danger' : successes === OSM_REGIONS.length ? 'success' : 'warning';
+    const actions = actionableRuns.filter((run) => run.source === 'service_areas_osm').length;
+    const automaticRetries = runs.filter(isAutomaticRetryPending).length;
+    const tone = actions ? 'danger' : automaticRetries || successes < OSM_REGIONS.length ? 'warning' : 'success';
     return `
       <article class="source-card">
         <div>
           <span class="pill ${tone}">${successes}/${OSM_REGIONS.length} zones à jour</span>
           <h3>Restaurants et services</h3>
           <p>Données OpenStreetMap vérifiées par zone.</p>
-          ${transientErrors ? `<p style="margin-top:8px">${transientErrors} zone${transientErrors > 1 ? 's' : ''} ${transientErrors > 1 ? 'seront relancées' : 'sera relancée'} automatiquement.</p>` : ''}
+          ${actions ? `<p style="margin-top:8px;color:var(--red)">${actions} zone${actions > 1 ? 's nécessitent' : ' nécessite'} une relance.</p>` : ''}
+          ${automaticRetries ? `<p style="margin-top:8px">${automaticRetries} zone${automaticRetries > 1 ? 's seront relancées' : ' sera relancée'} automatiquement.</p>` : ''}
         </div>
         <div class="source-actions">
-          <select id="osm-region" aria-label="Zone à mettre à jour">
-            ${OSM_REGIONS.map((region) => `<option value="${region}">${escapeHtml(REGION_LABELS[region])}</option>`).join('')}
-          </select>
-          <button data-sync-target="osm_region" type="button" ${active ? 'disabled' : ''}>${active ? 'En cours…' : 'Mettre à jour'}</button>
+          <button class="ghost" data-show-zones type="button">Voir les 14 zones</button>
+          ${active ? '<span class="pill info">Mise à jour en cours</span>' : ''}
         </div>
       </article>
+    `;
+  }
+
+  function renderOsmZoneRow(region, runs, activeRuns) {
+    const run = runs.find((item) => item.region === region);
+    const active = activeRuns.some((item) => item.source === 'service_areas_osm' && item.region === region);
+    const tone = active ? 'info' : syncRunTone(run);
+    const status = active ? 'En cours' : syncRunStatusLabel(run);
+    const detail = run
+      ? `${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}${run.message ? ` · ${escapeHtml(friendlySyncError(run.message))}` : ''}`
+      : 'Aucun résultat enregistré.';
+    return `
+      <div class="zone-row">
+        <span class="row-icon ${tone}">${active ? '↻' : run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
+        <div><strong>${escapeHtml(REGION_LABELS[region])}</strong><p>${detail}</p></div>
+        <span class="pill ${tone}">${escapeHtml(status)}</span>
+        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active ? 'disabled' : ''}>Actualiser</button>
+      </div>
     `;
   }
 
@@ -993,7 +1120,7 @@
       <div class="history-row">
         <span class="row-icon ${tone}">${run.status === 'success' ? '✓' : ACTIVE_SYNC_STATUSES.has(run.status) ? '↻' : '!'}</span>
         <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(trigger)} · ${escapeHtml(detail)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p></div>
-        <span class="pill ${tone}">${escapeHtml(syncStatusLabel(run.status))}</span>
+        <span class="pill ${tone}">${escapeHtml(syncRunStatusLabel(run))}</span>
       </div>
     `;
   }
@@ -1022,6 +1149,20 @@
   }
 
   async function handleDataAction(event) {
+    const showZonesButton = event.target.closest('button[data-show-zones]');
+    if (showZonesButton) {
+      const details = $('osm-zone-status');
+      if (details) {
+        details.open = true;
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      return;
+    }
+    const bulkSyncButton = event.target.closest('button[data-sync-all-regions]');
+    if (bulkSyncButton) {
+      await triggerBulkOsmSync(bulkSyncButton);
+      return;
+    }
     const syncButton = event.target.closest('button[data-sync-target]');
     if (syncButton) {
       await triggerSync(syncButton);
@@ -1033,21 +1174,19 @@
 
   async function triggerSync(button) {
     const target = button.dataset.syncTarget;
-    const region = target === 'osm_region' ? $('osm-region')?.value || null : null;
+    const region = target === 'osm_region' ? button.dataset.syncRegion || null : null;
     const labels = {
       fuel_prices: 'les prix carburant',
       service_areas: 'les aires officielles',
       osm_region: `les restaurants et services de ${REGION_LABELS[region] || 'la zone'}`,
     };
-    if (!labels[target] || !window.confirm(`Mettre à jour ${labels[target]} maintenant ?`)) return;
+    if (!labels[target] || (target === 'osm_region' && !region)) return;
+    if (!window.confirm(`Actualiser ${labels[target]} maintenant ?`)) return;
     button.disabled = true;
     const previous = button.textContent;
     button.textContent = 'Lancement…';
     try {
-      const result = await query(client.rpc('admin_trigger_sync', {
-        p_target: target,
-        p_region: region,
-      }));
+      const result = await requestSync(target, region);
       invalidate('home', 'data');
       await loadView('data', true);
       showFeedback(result?.alreadyRunning
@@ -1059,6 +1198,81 @@
       button.disabled = false;
       button.textContent = previous;
     }
+  }
+
+  function requestSync(target, region = null) {
+    return query(client.rpc('admin_trigger_sync', {
+      p_target: target,
+      p_region: region,
+    }));
+  }
+
+  async function triggerBulkOsmSync(button) {
+    if (state.bulkSync.active) return;
+    const activeRuns = (state.data?.recentRuns ?? []).filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
+    const regions = currentSyncRows(state.data?.latestSyncs)
+      .filter((run) => (
+        run.source === 'service_areas_osm'
+        && run.region
+        && isActionableDataRun(run)
+        && !isMatchingSyncActive(run, activeRuns)
+      ))
+      .map((run) => run.region);
+    if (regions.length < 2) {
+      showFeedback('Il n’y a pas plusieurs zones à relancer.');
+      return;
+    }
+    const regionNames = regions.map((region) => REGION_LABELS[region] || region).join(', ');
+    const confirmed = window.confirm(
+      `Relancer progressivement ${regions.length} zones ?\n\n${regionNames}\n\nElles seront traitées une par une pour ne pas surcharger la source publique. Garde la page ouverte jusqu’à la fin.`,
+    );
+    if (!confirmed) return;
+
+    state.bulkSync = { active: true, completed: 0, total: regions.length, region: regions[0] };
+    button.disabled = true;
+    renderData();
+    let failureMessage = '';
+
+    try {
+      for (const [index, region] of regions.entries()) {
+        state.bulkSync.completed = index;
+        state.bulkSync.region = region;
+        renderData();
+        showFeedback(`Relance ${index + 1}/${regions.length} : ${REGION_LABELS[region] || region}`);
+        const result = await requestSync('osm_region', region);
+        const completedRun = await waitForSyncRun(result?.runId);
+        if (!completedRun) {
+          throw new Error(`La relance de ${REGION_LABELS[region] || region} continue trop longtemps.`);
+        }
+        state.bulkSync.completed = index + 1;
+      }
+    } catch (error) {
+      failureMessage = String(error?.message || 'La relance progressive a été interrompue.');
+    } finally {
+      state.bulkSync = { active: false, completed: 0, total: 0, region: null };
+      invalidate('home', 'data');
+      await loadView('data', true);
+      showFeedback(failureMessage || `${regions.length} zones ont été relancées une par une.`);
+    }
+  }
+
+  async function waitForSyncRun(runId) {
+    if (!runId) return null;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < SYNC_WAIT_TIMEOUT_MS) {
+      await delay(SYNC_POLL_INTERVAL_MS);
+      const payload = await query(client.rpc('admin_data_v2'));
+      state.data = payload;
+      state.loaded.add('data');
+      const run = (payload?.recentRuns ?? []).find((item) => item.id === runId);
+      if (activeView === 'data') renderData();
+      if (run && !ACTIVE_SYNC_STATUSES.has(run.status)) return run;
+    }
+    return null;
+  }
+
+  function delay(milliseconds) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
   }
 
   function overrideFieldValue(id, field) {
@@ -1109,8 +1323,10 @@
     const latest = releases[0] ?? null;
     const command = 'npm run update:production -- --message "Description de la mise à jour"';
     const previewCommand = 'npm run update:preview -- --message "Test avant production"';
-    const nativeCommand = 'npm run build:ios:testflight -- --message "Nouvelle version iOS"';
-    const heroStatus = latest ? releaseStatusLabel(latest.status) : 'Suivi prêt';
+    const iosCommand = 'npm run build:ios:testflight -- --message "Nouvelle version iOS"';
+    const androidPreviewCommand = 'npm run build:android:internal -- --message "Test Android sur téléphone"';
+    const androidPlayCommand = 'npm run build:android:play -- --message "Nouvelle version Android"';
+    const heroStatus = latest ? releaseStatusText(latest) : 'Suivi prêt';
     const heroTitle = latest ? releaseLabel(latest) : 'Prochaine mise à jour';
     const heroMessage = latest
       ? latest.error_summary || latest.message || 'Statut enregistré automatiquement.'
@@ -1131,30 +1347,63 @@
         </div>
       </section>
 
+      <section class="release-tools">
+        <div>
+          <strong>Choisir le bon type de livraison</strong>
+          <p>Interface ou JavaScript : mise à jour OTA. Icône, permission ou dépendance native : nouveau build.</p>
+        </div>
+        <a href="${EXPO_BUILDS_URL}" target="_blank" rel="noopener noreferrer">Ouvrir les builds Expo</a>
+      </section>
+
       <section class="section-grid">
-        <article class="card">
-          <div class="card-head"><div><h3>Publier en production</h3><p>Contrôles, publication et suivi automatique.</p></div></div>
-          <div class="command-wrap">
-            <pre class="command">${escapeHtml(command)}</pre>
-            <button class="ghost small" data-copy-command="${escapeHtml(command)}" type="button">Copier</button>
-          </div>
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Tester en preview</h3><p>Même suivi, sans toucher au canal production.</p></div></div>
-          <div class="command-wrap">
-            <pre class="command">${escapeHtml(previewCommand)}</pre>
-            <button class="ghost small" data-copy-command="${escapeHtml(previewCommand)}" type="button">Copier</button>
-          </div>
-        </article>
         <article class="card wide-card">
-          <div class="card-head"><div><h3>Créer une nouvelle version iOS</h3><p>Pour une modification native destinée à TestFlight et à l’App Store.</p></div></div>
-          <div class="command-wrap">
-            <pre class="command">${escapeHtml(nativeCommand)}</pre>
-            <button class="ghost small" data-copy-command="${escapeHtml(nativeCommand)}" type="button">Copier</button>
+          <div class="card-head"><div><h3>Correction sans nouveau build</h3><p>À utiliser pour les changements d’interface ou de logique JavaScript.</p></div></div>
+          <div class="release-command-grid">
+            <div class="command-block">
+              <h4>1. Tester sur le canal preview</h4>
+              <div class="command-wrap">
+                <pre class="command">${escapeHtml(previewCommand)}</pre>
+                <button class="ghost small" data-copy-command="${escapeHtml(previewCommand)}" type="button">Copier</button>
+              </div>
+            </div>
+            <div class="command-block">
+              <h4>2. Publier en production après validation</h4>
+              <div class="command-wrap">
+                <pre class="command">${escapeHtml(command)}</pre>
+                <button class="ghost small" data-copy-command="${escapeHtml(command)}" type="button">Copier</button>
+              </div>
+            </div>
           </div>
         </article>
+
+        <article class="card">
+          <div class="card-head"><div><h3>Nouvelle version iOS</h3><p>Build natif pour TestFlight puis l’App Store.</p></div></div>
+          <div class="command-wrap">
+            <pre class="command">${escapeHtml(iosCommand)}</pre>
+            <button class="ghost small" data-copy-command="${escapeHtml(iosCommand)}" type="button">Copier</button>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head"><div><h3>Nouvelle version Android</h3><p>Commencer par l’APK installable. Créer l’AAB seulement après validation.</p></div></div>
+          <div class="command-block">
+            <h4>APK de test sur téléphone</h4>
+            <div class="command-wrap">
+              <pre class="command">${escapeHtml(androidPreviewCommand)}</pre>
+              <button class="ghost small" data-copy-command="${escapeHtml(androidPreviewCommand)}" type="button">Copier</button>
+            </div>
+          </div>
+          <div class="command-block">
+            <h4>AAB pour le test fermé Google Play</h4>
+            <div class="command-wrap">
+              <pre class="command">${escapeHtml(androidPlayCommand)}</pre>
+              <button class="ghost small" data-copy-command="${escapeHtml(androidPlayCommand)}" type="button">Copier</button>
+            </div>
+          </div>
+        </article>
+
         <article class="card wide-card">
-          <div class="card-head"><div><h3>Historique des versions</h3><p>OTA, builds natifs et statuts App Store sont séparés.</p></div></div>
+          <div class="card-head"><div><h3>Historique des versions</h3><p>Plateforme, environnement et état réel de chaque livraison.</p></div></div>
           <div class="history-list">
             ${releases.length ? releases.map(renderReleaseRow).join('') : emptyInline('Aucune version suivie pour le moment.')}
           </div>
@@ -1183,7 +1432,7 @@
           </div>
           ${release.error_summary ? `<p class="hint" style="color:var(--red);margin-top:5px">${escapeHtml(release.error_summary)}</p>` : ''}
         </div>
-        <span class="pill ${tone}">${escapeHtml(releaseStatusLabel(release.status))}</span>
+        <span class="pill ${tone}">${escapeHtml(releaseStatusText(release))}</span>
       </div>
     `;
   }
@@ -1315,7 +1564,7 @@
     const usageUrl = safeExternalUrl(config.usageUrl);
     const homeSyncs = state.home?.data?.latestSyncs;
     const currentSyncFailures = Array.isArray(homeSyncs)
-      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error' && !isTransientSyncError(run)).length
+      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error' && !isAutomaticRetryPending(run)).length
       : Number(automation.syncFailures24h) || 0;
     const emailCapacity = getEmailCapacity(state.emailQuota);
     const emailDaily = emailCapacity.metrics.find((metric) => metric.key === 'email-day');
@@ -1642,7 +1891,7 @@
     if (status === 'requested') return 'En attente';
     if (status === 'running') return 'En cours';
     if (status === 'success') return 'À jour';
-    if (status === 'partial') return 'Partiel';
+    if (status === 'partial') return 'Incomplet';
     if (status === 'error') return 'Échec';
     return 'Pas encore';
   }
@@ -1665,8 +1914,45 @@
       && isTransientSyncMessage(run.message);
   }
 
+  function isAutomaticRetryPending(run) {
+    if (!isTransientSyncError(run) || run.triggerSource !== 'schedule') return false;
+    const failedAt = dateValue(run.finishedAt || run.startedAt || run.requestedAt);
+    return failedAt > 0 && Date.now() - failedAt < 3 * 60 * 60 * 1000;
+  }
+
+  function isActionableDataRun(run) {
+    if (!run || ACTIVE_SYNC_STATUSES.has(run.status)) return false;
+    if (!['error', 'partial'].includes(run.status)) return false;
+    return !isAutomaticRetryPending(run);
+  }
+
+  function isMatchingSyncActive(run, activeRuns) {
+    return activeRuns.some((active) => (
+      active.source === run.source
+      && (run.source !== 'service_areas_osm' || active.region === run.region)
+    ));
+  }
+
+  function syncTargetForRun(run) {
+    if (run?.source === 'fuel_prices_gov') return 'fuel_prices';
+    if (run?.source === 'service_areas_operator') return 'service_areas';
+    if (run?.source === 'service_areas_osm') return 'osm_region';
+    return '';
+  }
+
+  function dataActionLabel(run) {
+    if (run?.status === 'partial') return 'Mise à jour incomplète';
+    if (isTransientSyncError(run) && run?.triggerSource === 'retry') return 'Relance automatique échouée';
+    if (isTransientSyncError(run) && run?.triggerSource === 'admin') return 'Relance manuelle échouée';
+    return 'Échec à traiter';
+  }
+
+  function syncRunStatusLabel(run) {
+    return isAutomaticRetryPending(run) ? 'Relance prévue' : syncStatusLabel(run?.status);
+  }
+
   function syncRunTone(run) {
-    return isTransientSyncError(run) ? 'warning' : syncTone(run?.status);
+    return isAutomaticRetryPending(run) || run?.status === 'partial' ? 'warning' : syncTone(run?.status);
   }
 
   function reportStatusTone(status) {
@@ -1705,6 +1991,12 @@
     return labels[status] || status || 'Inconnu';
   }
 
+  function releaseStatusText(release) {
+    if (release?.kind === 'native_build' && release?.status === 'succeeded') return 'Build prêt';
+    if (release?.kind === 'store_submission' && release?.status === 'succeeded') return 'Envoyée';
+    return releaseStatusLabel(release?.status);
+  }
+
   function releaseTone(status) {
     if (['succeeded', 'approved', 'available'].includes(status)) return 'success';
     if (['failed', 'rejected'].includes(status)) return 'danger';
@@ -1714,10 +2006,15 @@
   }
 
   function releaseLabel(release) {
+    const platform = release.platform === 'ios'
+      ? 'iOS'
+      : release.platform === 'android' ? 'Android'
+        : release.platform === 'all' ? 'iOS + Android' : '';
     const kind = release.kind === 'ota_update'
-      ? 'Mise à jour OTA'
-      : release.kind === 'native_build' ? 'Build natif'
-        : release.kind === 'store_submission' ? 'Soumission App Store' : 'Publication App Store';
+      ? `Mise à jour OTA${platform ? ` ${platform}` : ''}`
+      : release.kind === 'native_build' ? `Build${platform ? ` ${platform}` : ' natif'}`
+        : release.kind === 'store_submission' ? `Soumission${platform ? ` ${platform}` : ''}`
+          : `Publication${platform ? ` ${platform}` : ' App Store'}`;
     const version = release.version ? ` ${release.version}` : '';
     const build = release.buildNumber || release.build_number;
     return `${kind}${version}${build ? ` (build ${build})` : ''}`;
