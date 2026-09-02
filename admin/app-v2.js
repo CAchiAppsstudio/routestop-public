@@ -349,6 +349,15 @@
     return data ?? fallback;
   }
 
+  async function loadFuelLinkCandidates() {
+    const current = await queryOptional(client.rpc('admin_fuel_link_candidates_v2'), null);
+    if (current) return current;
+    return queryOptional(
+      client.rpc('admin_fuel_link_candidates_v1'),
+      { unavailable: true, summary: {}, candidates: [] },
+    );
+  }
+
   async function loadView(view, force = false) {
     if (!client || !session || state.loading.has(view)) return;
     if (state.loaded.has(view) && !force) {
@@ -385,10 +394,7 @@
             .select('id, station_id, station_name, station_brand, brand_override, fuels, services_add, services_remove, tenants_add, tenants_remove, hidden, note, is_active, updated_at')
             .order('updated_at', { ascending: false })
             .limit(200)),
-          queryOptional(
-            client.rpc('admin_fuel_link_candidates_v1'),
-            { unavailable: true, summary: {}, candidates: [] },
-          ),
+          loadFuelLinkCandidates(),
         ]);
         state.data = data;
         state.overrides = overrides ?? [];
@@ -1066,9 +1072,38 @@
     `;
   }
 
+  function fuelReviewChoice(candidate, alternatives) {
+    const review = candidate.review && typeof candidate.review === 'object' ? candidate.review : null;
+    if (!review?.areaId) return null;
+    const matchingArea = alternatives.find((area) => area.areaId === review.areaId) ?? {};
+    return {
+      ...matchingArea,
+      ...review,
+      areaName: matchingArea.areaName || review.areaName || review.areaId,
+    };
+  }
+
+  function renderFuelAreaOptions(alternatives, review) {
+    const choices = [...alternatives];
+    if (review && !choices.some((area) => area.areaId === review.areaId)) choices.unshift(review);
+    return choices
+      .filter((area) => area?.areaId)
+      .map((area) => {
+        const route = [area.highway, area.direction].filter(Boolean).join(' · ');
+        const label = [
+          area.areaName || area.areaId,
+          route,
+          formatCandidateDistance(area.distanceM),
+        ].filter(Boolean).join(' — ');
+        return `<option value="${escapeHtml(area.areaId)}" ${review?.areaId === area.areaId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      })
+      .join('');
+  }
+
   function renderFuelLinkCandidate(candidate) {
     const category = fuelCandidateCategory(candidate);
     const alternatives = Array.isArray(candidate.alternatives) ? candidate.alternatives : [];
+    const review = fuelReviewChoice(candidate, alternatives);
     const best = alternatives[0] ?? {
       areaId: candidate.areaId,
       areaName: candidate.areaName,
@@ -1077,28 +1112,33 @@
       operatorSource: candidate.operatorSource,
       distanceM: candidate.distanceM,
     };
+    const selectedArea = review ?? best;
     const stationTitle = candidate.city || candidate.address || `Station ${candidate.stationId}`;
-    const route = [best.highway, best.direction].filter(Boolean).join(' · ');
+    const route = [selectedArea.highway, selectedArea.direction].filter(Boolean).join(' · ');
     const searchable = [
       candidate.stationId, candidate.address, candidate.city, candidate.department, candidate.region,
-      best.areaId, best.areaName, best.highway, best.direction, best.operatorSource,
+      selectedArea.areaId, selectedArea.areaName, selectedArea.highway, selectedArea.direction, selectedArea.operatorSource,
+      ...alternatives.flatMap((area) => [area.areaId, area.areaName, area.highway, area.direction]),
     ].filter(Boolean).join(' ').toLowerCase();
+    const options = renderFuelAreaOptions(alternatives, review);
 
     return `
-      <article class="fuel-candidate-row" data-fuel-candidate data-category="${category}" data-search="${escapeHtml(searchable)}">
+      <article class="fuel-candidate-row ${review ? 'saved' : ''}" data-fuel-candidate data-category="${category}" data-saved="${review ? 'true' : 'false'}" data-search="${escapeHtml(searchable)}">
         <div class="fuel-candidate-station">
-          <span class="pill ${fuelCandidateTone(category)}">${escapeHtml(fuelCandidateLabel(category))} · ${escapeHtml(formatCandidateDistance(candidate.distanceM))}</span>
+          ${review
+            ? `<span class="pill info">Choix enregistré · ${escapeHtml(formatCandidateDistance(review.distanceM))}</span>`
+            : `<span class="pill ${fuelCandidateTone(category)}">${escapeHtml(fuelCandidateLabel(category))} · ${escapeHtml(formatCandidateDistance(candidate.distanceM))}</span>`}
           <strong>${escapeHtml(stationTitle)}</strong>
           <p>Station officielle ${escapeHtml(candidate.stationId)}${candidate.department ? ` · ${escapeHtml(candidate.department)}` : ''}</p>
         </div>
         <span class="fuel-candidate-arrow" aria-hidden="true">→</span>
         <div class="fuel-candidate-area">
-          <span>Aire proposée, non validée</span>
-          <strong>${escapeHtml(best.areaName || 'Aire à identifier')}</strong>
-          <p>${escapeHtml(route || best.operatorSource || 'Autoroute et sens à vérifier')}</p>
+          <span>${review ? 'Choix enregistré, non appliqué' : 'Aire proposée, non validée'}</span>
+          <strong>${escapeHtml(selectedArea.areaName || 'Aire à identifier')}</strong>
+          <p>${escapeHtml(route || selectedArea.operatorSource || 'Autoroute et sens à vérifier')}</p>
         </div>
-        <details class="fuel-candidate-details">
-          <summary>Voir les éléments de comparaison</summary>
+        <details class="fuel-candidate-details" ${review ? 'open' : ''}>
+          <summary>${review ? 'Modifier le choix enregistré' : 'Comparer et enregistrer un choix'}</summary>
           <div class="fuel-candidate-detail-grid">
             <div>
               <span class="detail-label">Prix officiels disponibles</span>
@@ -1109,7 +1149,22 @@
               ${alternatives.length ? alternatives.map(renderFuelLinkAlternative).join('') : '<p>Aucune fiche d’aire suffisamment proche n’a été trouvée.</p>'}
             </div>
           </div>
-          <p class="fuel-candidate-warning">Lecture seule : la proximité ne prouve ni le bon sens de circulation ni l’appartenance à la même aire.</p>
+          <div class="fuel-review-editor">
+            <div class="fuel-review-fields">
+              <label>Aire à retenir
+                <select data-fuel-area-choice ${options ? '' : 'disabled'}>${options || '<option>Aucune proposition disponible</option>'}</select>
+              </label>
+              <label>Note facultative
+                <textarea data-fuel-review-note maxlength="500" placeholder="Pourquoi ce choix ?">${escapeHtml(review?.note || '')}</textarea>
+              </label>
+            </div>
+            <div class="fuel-review-actions">
+              <button data-save-fuel-review="${escapeHtml(candidate.stationId)}" type="button" ${options ? '' : 'disabled'}>${review ? 'Mettre à jour le choix' : 'Enregistrer ce choix'}</button>
+              ${review ? `<button class="ghost" data-clear-fuel-review="${escapeHtml(candidate.stationId)}" type="button">Annuler le choix</button>` : ''}
+              <p>Cette décision reste en attente et ne change rien dans l’application.</p>
+            </div>
+          </div>
+          <p class="fuel-candidate-warning">Vérifie le nom, l’autoroute et le sens : la proximité seule ne prouve pas qu’il s’agit de la bonne aire.</p>
         </details>
       </article>
     `;
@@ -1134,6 +1189,8 @@
     const reviewCount = (Number(summary.between151And500m) || 0) + (Number(summary.between501And1000m) || 0)
       || candidates.filter((item) => fuelCandidateCategory(item) === 'review').length;
     const farCount = Number(summary.over1000m) || candidates.filter((item) => fuelCandidateCategory(item) === 'far').length;
+    const savedCount = Number(summary.savedForReview)
+      || candidates.filter((item) => item.review?.areaId).length;
 
     return `
       <section class="fuel-link-panel" id="fuel-link-candidates">
@@ -1141,25 +1198,27 @@
           <div>
             <p class="eyebrow">Couverture carburant</p>
             <h3>Correspondances à vérifier</h3>
-            <p>${formatNumber(candidates.length)} stations officielles avec prix ne sont pas encore reliées exactement à une fiche d’aire. Cette liste ne modifie aucune donnée.</p>
+            <p>${formatNumber(candidates.length)} stations officielles avec prix ne sont pas encore reliées exactement à une fiche d’aire. Tu peux préparer les choix sans modifier l’application.</p>
           </div>
-          <span class="pill info">Lecture seule</span>
+          <span class="pill info">Préparation sans activation</span>
         </div>
         <div class="fuel-link-summary">
           <div><span>Très proches</span><strong>${formatNumber(closeCount)}</strong><small>0 à 150 m</small></div>
           <div><span>À vérifier</span><strong>${formatNumber(reviewCount)}</strong><small>151 m à 1 km</small></div>
           <div><span>Aire à identifier</span><strong>${formatNumber(farCount)}</strong><small>Plus de 1 km</small></div>
+          <div><span>Choix enregistrés</span><strong>${formatNumber(savedCount)}</strong><small>Sans effet sur l’app</small></div>
         </div>
         <div class="fuel-link-toolbar">
           <div class="filter-tabs" role="group" aria-label="Filtrer les correspondances">
             <button class="${fuelLinkFilter === 'all' ? 'active' : ''}" data-fuel-link-filter="all" type="button">Toutes</button>
+            <button class="${fuelLinkFilter === 'saved' ? 'active' : ''}" data-fuel-link-filter="saved" type="button">Enregistrées</button>
             <button class="${fuelLinkFilter === 'close' ? 'active' : ''}" data-fuel-link-filter="close" type="button">Très proches</button>
             <button class="${fuelLinkFilter === 'review' ? 'active' : ''}" data-fuel-link-filter="review" type="button">À vérifier</button>
             <button class="${fuelLinkFilter === 'far' ? 'active' : ''}" data-fuel-link-filter="far" type="button">Éloignées</button>
           </div>
           <label class="fuel-link-search">Rechercher<input data-fuel-link-search value="${escapeHtml(fuelLinkSearch)}" placeholder="Ville, aire, A6, identifiant…" /></label>
         </div>
-        <div class="fuel-link-result-line"><strong id="fuel-candidate-visible">${formatNumber(candidates.length)} correspondances affichées</strong><span>Aucune validation automatique</span></div>
+        <div class="fuel-link-result-line"><strong id="fuel-candidate-visible">${formatNumber(candidates.length)} correspondances affichées</strong><span>Aucun choix n’est envoyé aux applications</span></div>
         <div class="fuel-candidate-list">
           ${candidates.length ? candidates.map(renderFuelLinkCandidate).join('') : emptyInline('Toutes les stations officielles sont déjà reliées.')}
         </div>
@@ -1172,7 +1231,8 @@
     if (!rows.length) return;
     let visible = 0;
     for (const row of rows) {
-      const matchesCategory = fuelLinkFilter === 'all' || row.dataset.category === fuelLinkFilter;
+      const matchesCategory = fuelLinkFilter === 'all'
+        || (fuelLinkFilter === 'saved' ? row.dataset.saved === 'true' : row.dataset.category === fuelLinkFilter);
       const matchesSearch = !fuelLinkSearch || (row.dataset.search || '').includes(fuelLinkSearch);
       const show = matchesCategory && matchesSearch;
       row.classList.toggle('hidden', !show);
@@ -1347,7 +1407,87 @@
     `;
   }
 
+  function fuelReviewErrorMessage(error) {
+    const message = String(error?.message || '');
+    if (message.includes('station_already_linked')) return 'Cette station vient déjà d’être reliée. Recharge la liste.';
+    if (message.includes('link_already_decided')) return 'Cette association possède déjà une décision définitive.';
+    if (message.includes('area_not_in_suggestions')) return 'Cette aire ne fait plus partie des trois propositions les plus proches.';
+    if (message.includes('area_too_far')) return 'Cette aire est trop éloignée pour être enregistrée sans analyse complémentaire.';
+    if (message.includes('not_admin')) return 'Ta session administrateur doit être reconnectée.';
+    return 'Le choix n’a pas pu être enregistré.';
+  }
+
+  async function saveFuelLinkReview(button) {
+    const row = button.closest('[data-fuel-candidate]');
+    const stationId = button.dataset.saveFuelReview;
+    const areaSelect = row?.querySelector('[data-fuel-area-choice]');
+    const note = row?.querySelector('[data-fuel-review-note]')?.value.trim() || null;
+    const areaId = areaSelect?.value;
+    if (!stationId || !areaId) {
+      showFeedback('Aucune aire n’est sélectionnée.');
+      return;
+    }
+
+    const areaLabel = areaSelect.options[areaSelect.selectedIndex]?.textContent || areaId;
+    const confirmed = window.confirm(
+      `Enregistrer ce choix pour vérification ?\n\nStation ${stationId}\n${areaLabel}\n\nCette action ne modifie pas l’application.`,
+    );
+    if (!confirmed) return;
+
+    button.disabled = true;
+    const previous = button.textContent;
+    button.textContent = 'Enregistrement…';
+    try {
+      const { error } = await client.rpc('admin_stage_fuel_link_review_v1', {
+        p_station_id: stationId,
+        p_area_id: areaId,
+        p_note: note,
+      });
+      if (error) throw error;
+      invalidate('home', 'data');
+      await loadView('data', true);
+      showFeedback('Choix enregistré pour vérification, sans effet sur l’application.');
+    } catch (error) {
+      showFeedback(fuelReviewErrorMessage(error));
+      button.disabled = false;
+      button.textContent = previous;
+    }
+  }
+
+  async function clearFuelLinkReview(button) {
+    const stationId = button.dataset.clearFuelReview;
+    if (!stationId) return;
+    if (!window.confirm(`Annuler le choix préparatoire pour la station ${stationId} ?`)) return;
+
+    button.disabled = true;
+    const previous = button.textContent;
+    button.textContent = 'Annulation…';
+    try {
+      const { error } = await client.rpc('admin_clear_fuel_link_review_v1', {
+        p_station_id: stationId,
+      });
+      if (error) throw error;
+      invalidate('home', 'data');
+      await loadView('data', true);
+      showFeedback('Choix préparatoire annulé. L’application reste inchangée.');
+    } catch (error) {
+      showFeedback('Le choix préparatoire n’a pas pu être annulé.');
+      button.disabled = false;
+      button.textContent = previous;
+    }
+  }
+
   async function handleDataAction(event) {
+    const saveFuelReviewButton = event.target.closest('button[data-save-fuel-review]');
+    if (saveFuelReviewButton) {
+      await saveFuelLinkReview(saveFuelReviewButton);
+      return;
+    }
+    const clearFuelReviewButton = event.target.closest('button[data-clear-fuel-review]');
+    if (clearFuelReviewButton) {
+      await clearFuelLinkReview(clearFuelReviewButton);
+      return;
+    }
     const filterButton = event.target.closest('button[data-fuel-link-filter]');
     if (filterButton) {
       fuelLinkFilter = filterButton.dataset.fuelLinkFilter || 'all';

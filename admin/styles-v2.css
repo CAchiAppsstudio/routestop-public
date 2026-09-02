@@ -641,7 +641,7 @@ textarea:focus {
 
 .fuel-link-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 18px 0;
 }
@@ -715,6 +715,11 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.9);
+}
+
+.fuel-candidate-row.saved {
+  border-color: #c9b5f2;
+  box-shadow: inset 3px 0 0 var(--violet);
 }
 
 .fuel-candidate-station,
@@ -796,6 +801,59 @@ textarea:focus {
   display: block;
   margin: 3px 0 1px;
   font-size: 12px;
+}
+
+.fuel-review-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 13px;
+  border: 1px solid #dfd4f5;
+  border-radius: 12px;
+  background: #f8f5ff;
+}
+
+.fuel-review-fields {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.9fr) minmax(250px, 1.1fr);
+  gap: 10px;
+}
+
+.fuel-review-fields label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fuel-review-fields select,
+.fuel-review-fields textarea {
+  width: 100%;
+  margin-top: 5px;
+  text-transform: none;
+}
+
+.fuel-review-fields textarea {
+  min-height: 42px;
+  resize: vertical;
+}
+
+.fuel-review-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fuel-review-actions p {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: right;
 }
 
 .fuel-candidate-warning {
@@ -1661,8 +1719,18 @@ textarea:focus {
   }
 
   .fuel-link-summary,
-  .fuel-candidate-detail-grid {
+  .fuel-candidate-detail-grid,
+  .fuel-review-editor,
+  .fuel-review-fields {
     grid-template-columns: 1fr;
+  }
+
+  .fuel-review-actions {
+    justify-content: flex-start;
+  }
+
+  .fuel-review-actions p {
+    text-align: left;
   }
 
   .fuel-candidate-row {
