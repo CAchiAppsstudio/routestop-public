@@ -83,9 +83,11 @@
             : actionType === 'signup' || actionType === 'email';
           const validAction = action.protocol === 'https:'
             && action.hostname === 'ubvvtmrnczqgoiavijfp.supabase.co'
+            && !action.username && !action.password && !action.port
             && action.pathname === '/auth/v1/verify'
             && validType;
-          const validRedirect = redirect.protocol === 'routestop:' && redirect.hostname === 'auth';
+          const validRedirect = redirect.protocol === 'routestop:' && redirect.hostname === 'auth'
+            && !redirect.pathname && !redirect.port && !redirect.username && !redirect.password;
 
           if (!validAction || !validRedirect) throw new Error('invalid_auth_action');
           button.href = action.toString();

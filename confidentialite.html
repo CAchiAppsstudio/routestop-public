@@ -33,7 +33,7 @@
         Cette page explique simplement quelles données RouteStop utilise, pourquoi,
         avec qui elles sont traitées et comment garder le contrôle.
       </p>
-      <p class="meta">Version en vigueur : 29 août 2026</p>
+      <p class="meta">Version en vigueur : 29 septembre 2026</p>
     </section>
   </header>
 
@@ -102,12 +102,28 @@
 
         <h3>Statistiques facultatives</h3>
         <p>
-          Les statistiques sont désactivées par défaut. Si vous les autorisez dans
+          Les statistiques propres à RouteStop sont désactivées par défaut. Si vous les autorisez dans
           « Confidentialité &amp; support », RouteStop enregistre des interactions produit,
           des caractéristiques agrégées du trajet, des zones approximatives arrondies à
           0,1 degré et, pour les aires consultées, leur identifiant, leur nom et leur enseigne.
           Aucune adresse exacte, position GPS brute ni aucun identifiant de compte ne sont
           inclus. Vous pouvez retirer votre accord à tout moment depuis le même écran.
+        </p>
+
+        <h3>Carte Google Maps sur Android</h3>
+        <p>
+          Lors de l’utilisation de la carte Android, le SDK Google Maps collecte des
+          informations sur l’appareil et sa version système, des diagnostics et journaux
+          de plantage du SDK, l’adresse IP et un identifiant pseudonyme propre à Maps.
+          Les déplacements et zooms de la carte peuvent aussi être transmis à Google.
+          Google utilise ces données pour maintenir et améliorer ses services.
+        </p>
+        <p>
+          Cette collecte par Google est distincte des statistiques facultatives RouteStop :
+          désactiver ces dernières ne désactive pas la collecte technique de Google Maps.
+          Elle n’est pas utilisée par RouteStop pour la publicité. Vous pouvez consulter
+          les aires en liste sans ouvrir la carte. Les règles de Google sont décrites dans
+          sa <a href="https://policies.google.com/privacy">politique de confidentialité</a>.
         </p>
 
         <h3>Données techniques</h3>
@@ -167,7 +183,7 @@
             RouteStop demande uniquement votre identité de base et n’accède ni à Gmail,
             ni à Drive, ni à vos contacts ;
           </li>
-          <li><strong>IGN Géoplateforme</strong>, ainsi qu’<strong>OpenStreetMap/Nominatim</strong> uniquement en secours, pour rechercher une adresse ou un lieu ;</li>
+          <li><strong>IGN Géoplateforme</strong>, pour rechercher une adresse ou un lieu ; les versions antérieures peuvent encore utiliser <strong>OpenStreetMap/Nominatim</strong> en secours ;</li>
           <li><strong>OSRM</strong>, pour calculer l’itinéraire demandé ;</li>
           <li><strong>CARTO</strong>, pour les fonds de carte iPhone ;</li>
           <li><strong>Google Maps Platform</strong>, pour afficher la carte Android, et Google pour certains visuels d’enseignes ;</li>
