@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f8f3ff" />
   <title>RouteStop — Trouvez la bonne aire sur votre trajet</title>
-  <meta name="description" content="Téléchargez gratuitement RouteStop sur iPhone pour afficher les aires situées sur votre trajet, comparer les prix carburants, restaurants et services, puis rejoindre l’arrêt choisi." />
+  <meta name="description" content="Téléchargez gratuitement RouteStop sur iPhone et Android pour afficher les aires situées sur votre trajet, comparer les prix carburants, restaurants et services, puis rejoindre l’arrêt choisi." />
   <meta property="og:title" content="RouteStop — La bonne aire avant de vous arrêter" />
-  <meta property="og:description" content="RouteStop est disponible gratuitement sur iPhone : aires d’autoroute, prix carburants, restaurants et services utiles le long de votre trajet." />
+  <meta property="og:description" content="RouteStop est disponible gratuitement sur iPhone et Android : aires d’autoroute, prix carburants, restaurants et services utiles le long de votre trajet." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://routestop.fr/" />
   <meta property="og:image" content="https://routestop.fr/assets/social-card.jpg" />
@@ -17,17 +17,20 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="canonical" href="https://routestop.fr/" />
   <link rel="icon" type="image/png" href="assets/icon.png" />
-  <link rel="stylesheet" href="site.css" />
+  <link rel="stylesheet" href="site.css?v=20261011-android" />
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       "name": "RouteStop",
       "applicationCategory": "TravelApplication",
-      "operatingSystem": "iOS",
+      "operatingSystem": ["iOS", "Android"],
       "description": "RouteStop aide à choisir une aire d’autoroute utile le long d’un trajet.",
       "url": "https://routestop.fr/",
-      "downloadUrl": "https://apps.apple.com/fr/app/routestop/id6770921692",
+      "downloadUrl": [
+        "https://apps.apple.com/fr/app/routestop/id6770921692",
+        "https://play.google.com/store/apps/details?id=com.cachiappsstudio.routestop&hl=fr&gl=FR"
+      ],
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
     }
   </script>
@@ -46,7 +49,7 @@
         <a href="#demo">Démo</a>
         <a href="support.html">Support</a>
       </div>
-      <a class="nav-cta" href="https://apps.apple.com/fr/app/routestop/id6770921692" target="_blank" rel="noopener" aria-label="Télécharger RouteStop sur l’App Store, nouvel onglet">Télécharger</a>
+      <a class="nav-cta" href="#telecharger" aria-label="Choisir le téléchargement RouteStop pour iPhone ou Android">Télécharger</a>
     </nav>
   </header>
 
@@ -54,17 +57,21 @@
     <section class="hero" id="top">
       <div class="shell hero-grid">
         <div class="hero-copy">
-          <p class="status"><span></span> Disponible sur l’App Store</p>
+          <p class="status"><span></span> Disponible sur iPhone et Android</p>
           <h1>La bonne aire,<br /><strong>avant de vous arrêter.</strong></h1>
           <p class="hero-lead">
             Saisissez votre trajet. RouteStop affiche les aires sur votre route,
             compare les prix carburants, restaurants et services, puis vous guide
             vers l’arrêt choisi.
           </p>
-          <div class="hero-actions">
-            <a class="button primary" href="https://apps.apple.com/fr/app/routestop/id6770921692" target="_blank" rel="noopener" aria-label="Télécharger gratuitement RouteStop sur l’App Store, nouvel onglet">Télécharger gratuitement</a>
-            <a class="button secondary" href="#demo">Voir l’app en action</a>
+          <div class="download-block" id="telecharger" role="group" aria-label="Télécharger gratuitement RouteStop">
+            <p class="download-label">Télécharger gratuitement</p>
+            <div class="store-links">
+              <a class="button primary store-button" href="https://apps.apple.com/fr/app/routestop/id6770921692" target="_blank" rel="noopener" aria-label="Télécharger gratuitement RouteStop sur l’App Store pour iPhone, nouvel onglet"><span>Sur iPhone<small>App Store</small></span></a>
+              <a class="button primary store-button" href="https://play.google.com/store/apps/details?id=com.cachiappsstudio.routestop&amp;hl=fr&amp;gl=FR" target="_blank" rel="noopener" aria-label="Télécharger gratuitement RouteStop sur Google Play pour Android, nouvel onglet"><span>Sur Android<small>Google Play</small></span></a>
+            </div>
           </div>
+          <a class="demo-link" href="#demo">Voir l’app en action <span aria-hidden="true">↓</span></a>
           <ul class="quick-points" aria-label="Avantages principaux">
             <li>Recherche sans compte</li>
             <li>Prix datés</li>
@@ -231,11 +238,12 @@
     <section class="launch" id="lancement">
       <div class="shell launch-card">
         <img src="assets/icon.png" alt="" width="76" height="76" />
-        <p class="eyebrow">Disponible dès maintenant sur iPhone</p>
+        <p class="eyebrow">Disponible dès maintenant sur iPhone et Android</p>
         <h2>La prochaine pause commence avant la sortie.</h2>
-        <p>Téléchargez gratuitement RouteStop sur l’App Store et choisissez votre prochaine aire avant de quitter l’autoroute.</p>
-        <div class="launch-download">
-          <a class="button primary" href="https://apps.apple.com/fr/app/routestop/id6770921692" target="_blank" rel="noopener" aria-label="Télécharger RouteStop sur l’App Store, nouvel onglet">Télécharger sur l’App Store</a>
+        <p>Téléchargez gratuitement RouteStop sur l’App Store ou Google Play et choisissez votre prochaine aire avant de quitter l’autoroute.</p>
+        <div class="launch-download store-links" role="group" aria-label="Télécharger gratuitement RouteStop">
+          <a class="button primary store-button" href="https://apps.apple.com/fr/app/routestop/id6770921692" target="_blank" rel="noopener" aria-label="Télécharger gratuitement RouteStop sur l’App Store pour iPhone, nouvel onglet"><span>Sur iPhone<small>App Store</small></span></a>
+          <a class="button primary store-button" href="https://play.google.com/store/apps/details?id=com.cachiappsstudio.routestop&amp;hl=fr&amp;gl=FR" target="_blank" rel="noopener" aria-label="Télécharger gratuitement RouteStop sur Google Play pour Android, nouvel onglet"><span>Sur Android<small>Google Play</small></span></a>
         </div>
         <div class="social-links" aria-label="Suivre RouteStop">
           <a href="https://www.instagram.com/routestopapp/" rel="me noopener">Instagram</a>
