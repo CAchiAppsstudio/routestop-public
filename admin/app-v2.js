@@ -43,6 +43,7 @@
     home: ['Pilotage', 'Aujourd’hui'],
     actions: ['Décisions', 'À traiter'],
     data: ['Fiabilité', 'Données'],
+    areas: ['Vérification documentaire', 'Aires à vérifier'],
     releases: ['Livraison', 'Versions'],
     stats: ['Utilisation', 'Statistiques'],
     maintenance: ['Technique', 'Maintenance'],
@@ -89,7 +90,7 @@
 
   let client = null;
   let session = null;
-  let activeView = 'home';
+  let activeView = window.location?.hash === '#aires' ? 'areas' : 'home';
   let statusFilter = 'pending';
   let search = '';
   let fuelLinkFilter = 'all';
@@ -314,6 +315,7 @@
   async function setView(view) {
     if (!VIEW_TITLES[view]) view = 'home';
     activeView = view;
+    setHidden('live-state', view === 'areas');
     const [eyebrow, title] = VIEW_TITLES[view];
     setText('view-eyebrow', eyebrow);
     setText('view-title', title);
@@ -360,6 +362,16 @@
 
   async function loadView(view, force = false) {
     if (!client || !session || state.loading.has(view)) return;
+    if (view === 'areas') {
+      if (!window.RouteStopAreaReview) {
+        $('areas-view').innerHTML = errorMarkup('Le dossier des aires est indisponible. Recharge la page.');
+        showFeedback('Dossier non chargé.');
+        return;
+      }
+      window.RouteStopAreaReview.mount($('areas-view'));
+      showFeedback('Dossier du 18/10/2026 · lecture seule');
+      return;
+    }
     if (state.loaded.has(view) && !force) {
       renderView(view);
       return;

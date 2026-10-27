@@ -11,7 +11,8 @@
     />
     <title>RouteStop Admin</title>
     <link rel="icon" type="image/png" href="../assets/icon.png" />
-    <link rel="stylesheet" href="./styles-v2.css?v=202609020955" />
+    <link rel="stylesheet" href="./styles-v2.css?v=20261027-aires" />
+    <link rel="stylesheet" href="./area-review.css?v=20261027-aires" />
   </head>
   <body>
     <header class="topbar">
@@ -91,6 +92,7 @@
             <button class="nav active" data-view="home" type="button"><span>⌂</span>Aujourd’hui</button>
             <button class="nav" data-view="actions" type="button"><span>✓</span>À traiter <em id="pending-nav-count" class="nav-count hidden">0</em></button>
             <button class="nav" data-view="data" type="button"><span>↻</span>Données</button>
+            <button class="nav" data-view="areas" type="button"><span>◇</span>Aires à vérifier</button>
             <button class="nav" data-view="releases" type="button"><span>↑</span>Versions</button>
             <button class="nav" data-view="stats" type="button"><span>↗</span>Statistiques</button>
           </nav>
@@ -128,6 +130,7 @@
           </section>
 
           <section id="data-view" class="view hidden"></section>
+          <section id="areas-view" class="view hidden"></section>
           <section id="releases-view" class="view hidden"></section>
           <section id="stats-view" class="view hidden"></section>
           <section id="maintenance-view" class="view hidden"></section>
@@ -137,6 +140,8 @@
 
     <script src="./config.js"></script>
     <script src="./vendor/supabase-js-2.105.1.js"></script>
-    <script src="./app-v2.js?v=202609020955"></script>
+    <script src="./area-review-data.js?v=20261027-aires"></script>
+    <script src="./area-review.js?v=20261027-aires"></script>
+    <script src="./app-v2.js?v=20261027-aires"></script>
   </body>
 </html>
