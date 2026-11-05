@@ -33,7 +33,7 @@
         Cette page explique simplement quelles données RouteStop utilise, pourquoi,
         avec qui elles sont traitées et comment garder le contrôle.
       </p>
-      <p class="meta">Version en vigueur : 18 octobre 2026</p>
+      <p class="meta">Version en vigueur : 5 novembre 2026</p>
       <div class="actions"><a class="button" href="suppression-compte.html">Supprimer mon compte</a><a class="button secondary" href="#droits">Consulter mes droits</a></div>
     </section>
   </header>
@@ -60,6 +60,7 @@
       <section class="section" id="donnees"><h2>2. Que se passe-t-il quand vous cherchez un trajet ?</h2>
       <h3>Les adresses et les lieux saisis</h3>
       <p>Lorsque vous saisissez un départ ou une arrivée, un service de recherche d’adresses reçoit les informations nécessaires pour vous proposer un lieu. Les coordonnées du départ et de l’arrivée sont ensuite envoyées au service qui calcule votre itinéraire.</p>
+      <p>Dans les versions proposant les villes des pays voisins, à partir de trois caractères, le texte que vous saisissez est aussi envoyé à Photon, hébergé par Komoot. Cela concerne également les recherches de lieux en France. Ce service reçoit votre saisie et les informations techniques de connexion, dont votre adresse IP, pour proposer des villes. RouteStop ne lui transmet ni votre compte ni la position GPS fournie par votre téléphone. La recherche française auprès de l’IGN reste disponible.</p>
       <p>RouteStop ne conserve pas ces adresses et leurs coordonnées exactes dans sa base de données en ligne. Cela ne signifie pas qu’elles ne sont envoyées à aucun service : cette transmission est nécessaire pour répondre à votre recherche.</p>
       <h3>Votre position</h3>
       <p>Si vous appuyez sur « Ma position », RouteStop demande à votre téléphone l’autorisation d’utiliser votre position précise pour cette recherche. Elle n’est pas enregistrée dans la base de données en ligne de RouteStop et n’est pas utilisée pour vous suivre en arrière-plan ou en continu.</p>
@@ -122,6 +123,7 @@
       <ul>
 <li>Supabase : connexion au compte et stockage des informations du compte dans la base RouteStop, hébergée en Irlande, dans l’Union européenne. Les statistiques facultatives sont également enregistrées chez ce prestataire, séparément du compte.</li>
 <li>IGN Géoplateforme : recherche d’une adresse ou d’un lieu à partir de votre saisie ou de coordonnées.</li>
+<li>Photon, hébergé par Komoot : suggestions de villes des pays voisins à partir de votre saisie, en utilisant les données OpenStreetMap.</li>
 <li>Le service de calcul d’itinéraire utilisant OSRM : calcul du trajet à partir des coordonnées de départ et d’arrivée.</li>
 <li>Apple et Google : connexion à RouteStop, si vous choisissez de vous connecter avec l’un de ces services.</li>
 <li>Apple Plans : affichage de la carte sur iPhone à partir de RouteStop 1.0.1.</li>
