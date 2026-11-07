@@ -3,9 +3,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '37 1 * * *'
-  push:
-    branches: [main]
-    paths: ['scripts/osm-centre-extract.py', '.github/workflows/osm-centre.yml']
 permissions:
   contents: write
 concurrency:
@@ -25,15 +22,25 @@ jobs:
           sudo apt-get install -y --no-install-recommends osmium-tool
           python3 -m venv "$RUNNER_TEMP/osm-venv"
           "$RUNNER_TEMP/osm-venv/bin/pip" install --no-cache-dir osmium==4.3.2
-      - name: Download public OSM data and extract Centre
+      - name: Download public OSM data
         run: |
           mkdir -p "$RUNNER_TEMP/osm-centre"
           cd "$RUNNER_TEMP/osm-centre"
-          curl --fail --location --retry 2 --retry-delay 30 --connect-timeout 20 --max-time 600 \
-            --output france.osm.pbf https://download.geofabrik.de/europe/france-latest.osm.pbf
+          SOURCE_URL="$(curl --fail --head --location --silent --show-error --max-time 30 \
+            --output /dev/null --write-out '%{url_effective}' https://download.geofabrik.de/europe/france-latest.osm.pbf)"
+          [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
+          for ATTEMPT in 1 2; do
+            if curl --fail --location --continue-at - --connect-timeout 20 --max-time 600 \
+              --output france.osm.pbf "$SOURCE_URL"; then break; fi
+            if [ "$ATTEMPT" = 2 ]; then exit 1; fi
+            sleep 30
+          done
           DATA_AS_OF="$(osmium fileinfo -g header.option.osmosis_replication_timestamp france.osm.pbf)"
-          test -n "$DATA_AS_OF"
+          [[ "$DATA_AS_OF" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
           echo "DATA_AS_OF=$DATA_AS_OF" >> "$GITHUB_ENV"
+      - name: Extract Centre without querying Overpass
+        run: |
+          cd "$RUNNER_TEMP/osm-centre"
           osmium extract --bbox=0.97,44.37,4.23,47.53 --strategy=smart france.osm.pbf -o centre.osm.pbf
           rm france.osm.pbf
           osmium tags-filter centre.osm.pbf nwr/highway=services w/highway=motorway \

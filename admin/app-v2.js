@@ -1456,14 +1456,15 @@
     const status = active ? 'En cours' : isNotApplicable(run) ? 'Non applicable'
       : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : 'Données anciennes')
       : failed ? (isAutomaticRetryPending(run) ? 'Récentes · reprise prévue' : 'Récentes · essai échoué') : 'Données récentes';
-    const progress = run?.checkpoint;
+    const cloudCollection = region === 'center_2' && run?.metadata?.provider === 'geofabrik' && run.metadata.extractDataAsOf;
+    const progress = cloudCollection ? null : run?.checkpoint;
     const knownRefresh = region === 'center_2' ? run?.metadata?.knownRefresh : null;
     const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="zone-row compact-zone">
         <div class="zone-description">
           <strong>${escapeHtml(REGION_LABELS[region])}</strong>
-          <p>Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}</p>
+          <p>${cloudCollection ? `Fichier reçu : ${escapeHtml(formatDate(run.finishedAt))} · Données du ${escapeHtml(formatDate(cloudCollection))}` : `Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}`}</p>
           ${knownRefresh ? `<p>Services revérifiés : ${formatNumber(knownRefresh.verifiedAreas)}/${formatNumber(knownRefresh.linkedAreas)} aires déjà reliées.${knownRefresh.lastCheckedAt ? ` Dernier contrôle : ${escapeHtml(formatDate(knownRefresh.lastCheckedAt))}.` : ''}</p>` : ''}
           <details><summary>Détail de la collecte</summary>
             ${knownRefresh ? `<p>Les aires connues passent en priorité, sans attendre la recherche de nouvelles aires. ${formatNumber(knownRefresh.reviewAreas)} aire(s) demandent une vérification ; les informations précédentes sont conservées.</p>` : ''}
@@ -1473,7 +1474,7 @@
             ${run?.metadata?.deferred ? '<p>Aucune requête envoyée : cette attente ne consomme pas de relance.</p>' : ''}
           </details>
         </div>
-        <span class="pill ${tone}">${escapeHtml(status)}</span>
+        <span class="pill ${tone}">${escapeHtml(!active && cloudCollection && Date.now() - dateValue(cloudCollection) <= 48 * 3600000 && run.metadata.retryable === false && knownRefresh?.reviewAreas ? `${knownRefresh.reviewAreas} aire(s) à vérifier` : status)}</span>
         <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) || isAutomaticRetryPending(run) ? 'disabled' : ''}>${active ? 'En cours' : isAutomaticRetryPending(run) ? 'Reprise prévue' : progress ? 'Reprendre' : 'Actualiser'}</button>
       </div>
     `;
@@ -2315,6 +2316,7 @@
 
   function isAutomaticRetryPending(run) {
     if (isNotApplicable(run) || !['error', 'partial'].includes(run?.status)) return false;
+    if (run?.metadata?.provider === 'geofabrik' && run.metadata.retryable === false) return false;
     if (!isTransientSyncError(run) && !run.metadata?.retryable && run.status !== 'partial') return false;
     const retryAttempt = Number(run.metadata?.retryAttempt) || 0;
     const retryStillAvailable = ['schedule', 'admin'].includes(run.triggerSource)
@@ -2346,6 +2348,7 @@
   }
 
   function dataActionLabel(run) {
+    if (run?.metadata?.provider === 'geofabrik' && run.metadata.retryable === false && run.metadata.knownRefresh?.reviewAreas) return 'Aire à vérifier';
     if (run?.status === 'success') return 'Données anciennes';
     if (run?.status === 'never') return 'Jamais actualisé';
     if (run?.status === 'partial') return 'Mise à jour incomplète';
