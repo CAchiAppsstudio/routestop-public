@@ -524,7 +524,8 @@
     }
     const rows = currentSyncRows(payload.data?.latestSyncs);
     const syncKnown = Array.isArray(state.syncStatus?.runs) || Array.isArray(payload.data?.latestSyncs);
-    const pendingSyncs = rows.filter(needsSyncAttention).length;
+    const pendingSyncs = rows.filter(run => !isNotApplicable(run) && !isSyncDataFresh(run)).length;
+    const recentFailures = rows.filter(run => isSyncDataFresh(run) && ['error', 'partial'].includes(run.status)).length;
     const pendingReports = payload.reports?.pending;
     const dossierCount = window.RouteStopAreaReviewData?.pending?.length;
     const downloads = storeDownloadSummary(state.storeDownloads);
@@ -532,7 +533,7 @@
     const cards = [
       {
         view: 'data', icon: '↻', label: 'Données à actualiser', value: syncKnown ? count(pendingSyncs) : '—',
-        detail: !syncKnown ? 'État à vérifier' : pendingSyncs === 1 ? 'mise à jour à suivre' : pendingSyncs ? 'mises à jour à suivre' : 'Aucune mise à jour en attente',
+        detail: !syncKnown ? 'État à vérifier' : `${pendingSyncs ? 'sources anciennes ou non vérifiées' : 'Toutes les sources sont récentes'}${recentFailures ? ` · ${recentFailures} essai${recentFailures > 1 ? 's' : ''} échoué${recentFailures > 1 ? 's' : ''} sur des données récentes` : ''}`,
         action: 'Voir les zones et relancer', tone: syncKnown && pendingSyncs ? 'attention' : '',
       },
       {
@@ -1448,8 +1449,12 @@
   function renderOsmZoneRow(region, runs, activeRuns) {
     const run = runs.find((item) => item.region === region);
     const active = activeRuns.some((item) => item.source === 'service_areas_osm' && item.region === region);
-    const tone = active ? 'info' : syncRunTone(run);
-    const status = active ? 'En cours' : syncRunStatusLabel(run);
+    const fresh = isSyncDataFresh(run);
+    const failed = ['error', 'partial'].includes(run?.status);
+    const tone = active ? 'info' : fresh && failed ? 'warning' : syncRunTone(run);
+    const status = active ? 'En cours' : isNotApplicable(run) ? 'Non applicable'
+      : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : 'Données anciennes')
+      : failed ? (isAutomaticRetryPending(run) ? 'Récentes · reprise prévue' : 'Récentes · essai échoué') : 'Données récentes';
     const progress = run?.checkpoint;
     const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
@@ -1460,7 +1465,8 @@
           <details><summary>Détail de la collecte</summary>
             <p>${isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.' : escapeHtml(syncDatesLabel(run))}</p>
             ${run?.message ? `<p>${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
-            ${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/4 portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}
+            ${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/${formatNumber(progress.discoveryTotal || 4)} portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}
+            ${run?.metadata?.deferred ? '<p>Aucune requête envoyée : cette attente ne consomme pas de relance.</p>' : ''}
           </details>
         </div>
         <span class="pill ${tone}">${escapeHtml(status)}</span>
@@ -2311,7 +2317,8 @@
       || (run.triggerSource === 'retry' && retryAttempt < 3);
     if (!retryStillAvailable) return false;
     const failedAt = dateValue(run.finishedAt || run.startedAt || run.requestedAt);
-    return failedAt > 0 && Date.now() - failedAt < 3 * 60 * 60 * 1000;
+    const cycleAt = dateValue(run.metadata?.cycleStartedAt) || failedAt;
+    return failedAt > 0 && Date.now() - cycleAt < (run.source === 'service_areas_osm' ? 18 : 3) * 60 * 60 * 1000;
   }
 
   function isActionableDataRun(run) {
