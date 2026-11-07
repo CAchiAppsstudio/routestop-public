@@ -1457,13 +1457,16 @@
       : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : 'Données anciennes')
       : failed ? (isAutomaticRetryPending(run) ? 'Récentes · reprise prévue' : 'Récentes · essai échoué') : 'Données récentes';
     const progress = run?.checkpoint;
+    const knownRefresh = region === 'center_2' ? run?.metadata?.knownRefresh : null;
     const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="zone-row compact-zone">
         <div class="zone-description">
           <strong>${escapeHtml(REGION_LABELS[region])}</strong>
           <p>Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}</p>
+          ${knownRefresh ? `<p>Services revérifiés : ${formatNumber(knownRefresh.verifiedAreas)}/${formatNumber(knownRefresh.linkedAreas)} aires déjà reliées.${knownRefresh.lastCheckedAt ? ` Dernier contrôle : ${escapeHtml(formatDate(knownRefresh.lastCheckedAt))}.` : ''}</p>` : ''}
           <details><summary>Détail de la collecte</summary>
+            ${knownRefresh ? `<p>Les aires connues passent en priorité, sans attendre la recherche de nouvelles aires. ${formatNumber(knownRefresh.reviewAreas)} aire(s) demandent une vérification ; les informations précédentes sont conservées.</p>` : ''}
             <p>${isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.' : escapeHtml(syncDatesLabel(run))}</p>
             ${run?.message ? `<p>${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
             ${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/${formatNumber(progress.discoveryTotal || 4)} portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}
