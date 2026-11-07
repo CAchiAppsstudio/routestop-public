@@ -525,7 +525,8 @@
     const rows = currentSyncRows(payload.data?.latestSyncs);
     const syncKnown = Array.isArray(state.syncStatus?.runs) || Array.isArray(payload.data?.latestSyncs);
     const pendingSyncs = rows.filter(run => !isNotApplicable(run) && !isSyncDataFresh(run)).length;
-    const recentFailures = rows.filter(run => isSyncDataFresh(run) && ['error', 'partial'].includes(run.status)).length;
+    const recentFailures = rows.filter(run => isSyncDataFresh(run) && ['error', 'partial'].includes(run.status) && !run.metadata?.deferred).length;
+    const recentWaiting = rows.filter(run => isSyncDataFresh(run) && run.metadata?.deferred).length;
     const pendingReports = payload.reports?.pending;
     const dossierCount = window.RouteStopAreaReviewData?.pending?.length;
     const downloads = storeDownloadSummary(state.storeDownloads);
@@ -533,7 +534,7 @@
     const cards = [
       {
         view: 'data', icon: '↻', label: 'Données à actualiser', value: syncKnown ? count(pendingSyncs) : '—',
-        detail: !syncKnown ? 'État à vérifier' : `${pendingSyncs ? 'sources anciennes ou non vérifiées' : 'Toutes les sources sont récentes'}${recentFailures ? ` · ${recentFailures} essai${recentFailures > 1 ? 's' : ''} échoué${recentFailures > 1 ? 's' : ''} sur des données récentes` : ''}`,
+        detail: !syncKnown ? 'État à vérifier' : `${pendingSyncs ? 'sources anciennes ou non vérifiées' : 'Toutes les sources sont récentes'}${recentFailures ? ` · ${recentFailures} essai${recentFailures > 1 ? 's' : ''} échoué${recentFailures > 1 ? 's' : ''} sur des données récentes` : ''}${recentWaiting ? ` · ${recentWaiting} reprise${recentWaiting > 1 ? 's' : ''} en attente sur des données récentes` : ''}`,
         action: 'Voir les zones et relancer', tone: syncKnown && pendingSyncs ? 'attention' : '',
       },
       {
