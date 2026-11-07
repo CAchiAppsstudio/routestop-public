@@ -54,6 +54,8 @@
       return '<div class="error-block">Le dossier des aires n’a pas pu être chargé. Recharge la page. Aucune donnée de l’application n’a été modifiée.</div>';
     }
     return `<div class="area-review">
+      <details class="small-help area-review-context">
+        <summary>Critères et date de vérification</summary>
       <section class="area-review-intro">
         <p class="eyebrow">Accès aux pompes depuis les deux sens</p>
         <h3>On garde ce qui est sûr.<br>Le reste peut attendre.</h3>
@@ -69,6 +71,8 @@
         <p><strong>Pas de prix ?</strong> Cela ne veut pas dire « pas de station-service ».</p>
         <p><strong>Un pont ?</strong> Il faut aussi pouvoir atteindre les pompes et repartir dans le bon sens, sans sortir de l’autoroute.</p>
       </div>
+
+      </details>
       <div class="area-review-filters">
         <label>Rechercher une aire<input data-area-review-search type="search" placeholder="Chavanon, A29, Esso…" /></label>
         <label>Point à vérifier<select data-area-review-category><option value="all">Tous les points (${catalog.pending.length})</option>${Object.entries(categories).map(([key, label]) => `<option value="${key}">${label} (${catalog.pending.filter(record => record.category === key).length})</option>`).join('')}</select></label>

@@ -46,14 +46,16 @@
     reviewed: 'Traité',
     rejected: 'Rejeté',
   };
+  const PAGE_SIZE = 20;
   const VIEW_TITLES = {
-    home: ['Pilotage', 'Aujourd’hui'],
-    actions: ['Décisions', 'À traiter'],
-    data: ['Fiabilité', 'Données'],
-    areas: ['Vérification documentaire', 'Aires à vérifier'],
-    releases: ['Livraison', 'Versions'],
-    stats: ['Utilisation', 'Statistiques'],
-    maintenance: ['Technique', 'Maintenance'],
+    home: ['L’essentiel', 'Accueil'],
+    actions: ['Qualité', 'Signalements reçus'],
+    links: ['Qualité', 'Prix à associer'],
+    areas: ['Qualité', 'Accès à vérifier'],
+    data: ['Fraîcheur des informations', 'Mises à jour des données'],
+    releases: ['Suivi technique', 'Livraisons'],
+    stats: ['Diffusion', 'Téléchargements'],
+    maintenance: ['Suivi technique', 'Outils'],
   };
   const SUPABASE_PLAN_LIMITS = {
     free: {
@@ -104,6 +106,10 @@
   let search = '';
   let fuelLinkFilter = 'all';
   let fuelLinkSearch = '';
+  let fuelLinkPage = 1;
+  let reportsPage = 1;
+  let dataScope = 'attention';
+  let drawerOrigin = 'data';
   let realtimeChannel = null;
   let realtimeTimer = null;
   let activePoll = null;
@@ -184,7 +190,7 @@
   }
 
   function showFeedback(message) {
-    setText('admin-feedback', message);
+    setText($('detail-drawer')?.open ? 'detail-feedback' : 'admin-feedback', message);
   }
 
   function initClient() {
@@ -249,14 +255,21 @@
     });
 
     $('refresh-btn').addEventListener('click', () => loadView(activeView, true));
-    document.querySelectorAll('.nav[data-view]').forEach((button) => {
-      button.addEventListener('click', () => setView(button.dataset.view));
+    $('tools-btn').addEventListener('click', handleNavigationAction);
+    $('expand-drawer').addEventListener('click', () => setDrawerExpanded(!$('detail-drawer').classList.contains('is-expanded')));
+    $('close-drawer').addEventListener('click', () => $('detail-drawer').close());
+    $('detail-drawer').addEventListener('close', async () => {
+      activeView = 'home';
+      document.body.classList.remove('drawer-open');
+      await loadView('home', false);
+      document.querySelector('[data-go-view="' + drawerOrigin + '"]')?.focus();
     });
 
     $('status-tabs').addEventListener('click', (event) => {
       const button = event.target.closest('button[data-status]');
       if (!button) return;
       statusFilter = button.dataset.status;
+      reportsPage = 1;
       $('status-tabs').querySelectorAll('button').forEach((item) => {
         item.classList.toggle('active', item === button);
       });
@@ -265,11 +278,16 @@
 
     $('search').addEventListener('input', (event) => {
       search = event.target.value.trim().toLowerCase();
+      reportsPage = 1;
       renderReports();
     });
 
     $('home-view').addEventListener('click', handleNavigationAction);
-    $('home-view').addEventListener('submit', saveStoreDownloads);
+    $('stats-view').addEventListener('submit', saveStoreDownloads);
+    $('section-nav').addEventListener('click', handleNavigationAction);
+    $('links-view').addEventListener('click', handleDataAction);
+    $('links-view').addEventListener('input', handleDataInput);
+    $('data-view').addEventListener('click', handleNavigationAction);
     $('actions-view').addEventListener('click', handleReportAction);
     $('data-view').addEventListener('click', handleDataAction);
     $('data-view').addEventListener('input', handleDataInput);
@@ -293,6 +311,10 @@
     state.bulkSync = { active: false, completed: 0, total: 0, region: null };
     fuelLinkFilter = 'all';
     fuelLinkSearch = '';
+    fuelLinkPage = 1;
+    reportsPage = 1;
+    dataScope = 'attention';
+    $('detail-drawer')?.close();
     state.loaded.clear();
     state.loading.clear();
   }
@@ -324,19 +346,42 @@
     await setView(activeView);
   }
 
+  function setDrawerExpanded(expanded) {
+    $('detail-drawer').classList.toggle('is-expanded', expanded);
+    $('expand-drawer').setAttribute('aria-pressed', String(expanded));
+    setText('expand-drawer', expanded ? 'Réduire ⛶' : 'Agrandir ⛶');
+  }
+
   async function setView(view) {
     if (!VIEW_TITLES[view]) view = 'home';
     activeView = view;
-    setHidden('live-state', view === 'areas');
-    const [eyebrow, title] = VIEW_TITLES[view];
-    setText('view-eyebrow', eyebrow);
-    setText('view-title', title);
-    document.querySelectorAll('.nav[data-view]').forEach((button) => {
-      button.classList.toggle('active', button.dataset.view === view);
+    const drawer = $('detail-drawer');
+    if (view === 'home') {
+      if (drawer?.open) drawer.close();
+      await loadView('home', false);
+      return;
+    }
+    const group = ['links', 'areas'].includes(view) ? 'review' : ['maintenance', 'releases'].includes(view) ? 'tools' : '';
+    document.querySelectorAll('#section-nav [data-group]').forEach(element => {
+      element.classList.toggle('hidden', element.dataset.group !== group);
     });
-    document.querySelectorAll('.view').forEach((panel) => panel.classList.add('hidden'));
+    document.querySelectorAll('#section-nav [data-go-view]').forEach(button => {
+      button.classList.toggle('active', button.dataset.goView === view);
+      button.setAttribute('aria-current', button.dataset.goView === view ? 'page' : 'false');
+    });
+    setText('view-title', VIEW_TITLES[view][1]);
+    setText('detail-feedback', '');
+    document.querySelectorAll('#detail-drawer .view').forEach(panel => panel.classList.add('hidden'));
     $(`${view}-view`).classList.remove('hidden');
+    if (!drawer.open) {
+      drawerOrigin = view;
+      if (view === 'data') dataScope = 'attention';
+      setDrawerExpanded(['areas', 'links'].includes(view));
+      drawer.showModal();
+      document.body.classList.add('drawer-open');
+    }
     await loadView(view, false);
+    drawer.scrollTop = 0;
   }
 
   function loadingMarkup(label) {
@@ -416,8 +461,9 @@
           .order('created_at', { ascending: false })
           .limit(250)) ?? [];
       } else if (view === 'data') {
-        const [data, overrides, fuelLinkCandidates] = await Promise.all([
-          query(client.rpc('admin_data_v2')),
+        state.data = await query(client.rpc('admin_data_v2'));
+      } else if (view === 'links') {
+        const [overrides, fuelLinkCandidates] = await Promise.all([
           query(client
             .from('station_overrides')
             .select('id, station_id, station_name, station_brand, brand_override, fuels, services_add, services_remove, tenants_add, tenants_remove, hidden, note, is_active, updated_at')
@@ -425,7 +471,6 @@
             .limit(200)),
           loadFuelLinkCandidates(),
         ]);
-        state.data = data;
         state.overrides = overrides ?? [];
         state.fuelLinkCandidates = fuelLinkCandidates;
       } else if (view === 'releases') {
@@ -435,7 +480,7 @@
           .order('updated_at', { ascending: false })
           .limit(100)) ?? [];
       } else if (view === 'stats') {
-        state.analytics = await query(client.rpc('admin_analytics_v2', { p_days: state.analyticsDays }));
+        state.storeDownloads = await queryOptional(client.rpc('admin_store_downloads_v1'), null);
       } else if (view === 'maintenance') {
         const [operations, emailQuota] = await Promise.all([
           query(client.rpc('admin_operations_v1')),
@@ -446,7 +491,7 @@
       }
       state.loaded.add(view);
       renderView(view);
-      showFeedback(`Vérifié ${formatTime(new Date().toISOString())}`);
+      showFeedback(`Consulté à ${formatTime(new Date().toISOString())}`);
     } catch (error) {
       const message = String(error?.message || 'Erreur inconnue');
       if (viewElement) viewElement.innerHTML = errorMarkup(message);
@@ -460,6 +505,7 @@
     if (view === 'home') renderHome();
     else if (view === 'actions') renderReports();
     else if (view === 'data') renderData();
+    else if (view === 'links') renderFuelLinks();
     else if (view === 'releases') renderReleases();
     else if (view === 'stats') renderStats();
     else if (view === 'maintenance') renderMaintenance();
@@ -476,105 +522,47 @@
       $('home-view').innerHTML = loadingMarkup('l’accueil');
       return;
     }
-
-    const reportData = payload.reports ?? {};
-    const data = payload.data ?? {};
-    const releaseData = payload.releases ?? {};
-    const activity = payload.activity ?? {};
-    const operations = payload.operations ?? {};
-    const capacityOperations = state.operations ?? {
-      users: {
-        total: activity.usersTotal,
-        new7d: activity.newUsers7d,
-        signedIn7d: activity.activeUsers7d,
-        signedIn30d: activity.activeUsers7d,
+    const rows = currentSyncRows(payload.data?.latestSyncs);
+    const syncKnown = Array.isArray(state.syncStatus?.runs) || Array.isArray(payload.data?.latestSyncs);
+    const pendingSyncs = rows.filter(needsSyncAttention).length;
+    const pendingReports = payload.reports?.pending;
+    const dossierCount = window.RouteStopAreaReviewData?.pending?.length;
+    const downloads = storeDownloadSummary(state.storeDownloads);
+    const count = value => value == null ? '—' : formatNumber(value);
+    const cards = [
+      {
+        view: 'data', icon: '↻', label: 'Données à actualiser', value: syncKnown ? count(pendingSyncs) : '—',
+        detail: !syncKnown ? 'État à vérifier' : pendingSyncs === 1 ? 'mise à jour à suivre' : pendingSyncs ? 'mises à jour à suivre' : 'Aucune mise à jour en attente',
+        action: 'Voir les zones et relancer', tone: syncKnown && pendingSyncs ? 'attention' : '',
       },
-      database: { bytes: operations.databaseBytes },
-    };
-    const latestSyncs = currentSyncRows(data.latestSyncs);
-    const osmSyncs = latestSyncs.filter((item) => item.source === 'service_areas_osm');
-    const osmSuccesses = osmSyncs.filter(isSyncDataFresh).length;
-    const dataActions = latestSyncs.filter(isActionableDataRun);
-    const syncErrors = latestSyncs.filter((item) => item.status === 'error' && !isAutomaticRetryPending(item));
-    const syncWarnings = latestSyncs.filter(isAutomaticRetryPending);
-    const syncPartials = latestSyncs.filter((item) => item.status === 'partial');
-    const latestRelease = releaseData.latest;
-    const releaseFailed = latestRelease && ['failed', 'rejected'].includes(latestRelease.status);
-    const emailFailures = Number(operations.emailFailures7d) || 0;
-    const emailCapacity = getEmailCapacity(state.emailQuota);
-    const emailQuotaCritical = emailCapacity.metrics.some((metric) => metric.percent >= QUOTA_DANGER_PERCENT);
-    const emailQuotaWarning = emailCapacity.metrics.some((metric) => metric.percent >= QUOTA_WARNING_PERCENT);
-    const danger = syncErrors.length > 0 || releaseFailed || emailFailures > 0 || emailQuotaCritical;
-    const warning = !danger && (
-      osmSuccesses < APPLICABLE_OSM_REGIONS.length
-      || syncPartials.length > 0
-      || syncWarnings.length > 0
-      || Number(reportData.pending) > 0
-      || Number(releaseData.active) > 0
-      || (data.activeRuns ?? []).length > 0
-      || emailQuotaWarning
-    );
-    const healthTone = danger ? 'danger' : warning ? 'warning' : 'success';
-    const healthTitle = danger
-      ? 'Une intervention est nécessaire'
-      : warning ? 'Tout fonctionne, avec des points à suivre' : 'Tout fonctionne normalement';
-    const healthText = danger
-      ? 'Les éléments prioritaires sont regroupés ci-dessous.'
-      : warning ? 'Aucun blocage critique. Les actions utiles sont listées au même endroit.'
-        : 'Aucun signalement, incident de données ou échec de livraison à traiter.';
-    const tasks = buildHomeTasks(payload).slice(0, 5);
-
-    const pendingCount = Number(reportData.pending) || 0;
-    setText('pending-nav-count', pendingCount);
-    $('pending-nav-count').classList.toggle('hidden', pendingCount === 0);
-
+      {
+        view: 'actions', icon: '✉', label: 'Signalements reçus', value: count(pendingReports),
+        detail: pendingReports == null ? 'Nombre non disponible' : pendingReports ? 'en attente de ta réponse' : 'Aucun signalement en attente',
+        action: 'Lire et traiter', tone: '',
+      },
+      {
+        view: 'areas', icon: '◇', label: 'Aires à vérifier', value: count(dossierCount),
+        detail: dossierCount == null ? 'Dossier non disponible' : 'dossiers d’accès en attente',
+        action: 'Vérifier les accès et les prix', tone: '',
+      },
+      {
+        view: 'stats', icon: '↓', label: 'Téléchargements', value: count(downloads.total),
+        detail: downloads.total === null ? 'Relevés à compléter' : `Relevés au ${formatDateOnly(downloads.ios.asOf)} · manuels`,
+        action: 'Voir iPhone et Android', tone: 'downloads',
+      },
+    ];
+    const technicalAlerts = buildHomeTasks(payload).filter(task => ['maintenance', 'releases'].includes(task.view));
+    setText('tools-alert', technicalAlerts.length ? `· ${technicalAlerts.length} alerte(s)` : '');
     $('home-view').innerHTML = `
-      <section class="hero-status ${healthTone}">
-        <div class="status-icon">${danger ? '!' : warning ? '•' : '✓'}</div>
-        <div>
-          <p class="eyebrow">État général</p>
-          <h3>${escapeHtml(healthTitle)}</h3>
-          <p>${escapeHtml(healthText)}</p>
-        </div>
-        <span class="hero-time">${escapeHtml(formatDate(payload.generatedAt))}</span>
-      </section>
-
-      <section class="kpi-grid">
-        ${kpiCard('À traiter', pendingCount, pendingCount ? 'Action requise' : 'File vide')}
-        ${kpiCard('Recherches sur 7 jours', activity.routeSearches7d ?? 0, `${activity.routeSearches24h ?? 0} sur 24 h`)}
-        ${kpiCard('Comptes inscrits', activity.usersTotal ?? 0, `${activity.activeUsers7d ?? 0} actifs sur 7 jours`)}
-        ${kpiCard('Secteurs actualisés sous 48 h', `${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length}`, '17 secteurs suivis · 1 non applicable')}
-      </section>
-
-      ${renderStoreDownloads()}
-      ${renderPlanCapacity(capacityOperations, state.emailQuota)}
-
-      <section class="section-grid">
-        <article class="card">
-          <div class="card-head">
-            <div><h3>À faire maintenant</h3><p>Maximum cinq actions prioritaires.</p></div>
-          </div>
-          <div class="task-list">
-            ${tasks.length ? tasks.map(renderTask).join('') : emptyInline('Rien à traiter pour le moment.')}
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head">
-            <div><h3>Dernière version</h3><p>Suivi des mises à jour et publications.</p></div>
-            <button class="link-button" data-go-view="releases" type="button">Voir tout</button>
-          </div>
-          ${renderLatestRelease(latestRelease)}
-        </article>
-
-        <article class="card wide-card">
-          <div class="card-head">
-            <div><h3>Fraîcheur des données</h3><p>Une ligne par source, sans masquer les échecs.</p></div>
-            <button class="link-button" data-go-view="data" type="button">Gérer les données</button>
-          </div>
-          <div class="source-list">${renderHomeSources(latestSyncs)}</div>
-        </article>
-      </section>
+      ${renderQuotaOverview()}
+      <div class="dashboard-grid">
+        ${cards.map(card => `<button type="button" class="dashboard-tile ${card.tone}" data-go-view="${card.view}" aria-haspopup="dialog">
+          <span class="tile-top"><span class="tile-icon" aria-hidden="true">${card.icon}</span><span class="tile-label">${escapeHtml(card.label)}</span></span>
+          <span class="tile-value">${escapeHtml(card.value)}</span>
+          <span class="tile-detail">${escapeHtml(card.detail)}</span>
+          <span class="tile-action">${escapeHtml(card.action)} <span aria-hidden="true">→</span></span>
+        </button>`).join('')}
+      </div>
     `;
   }
 
@@ -599,15 +587,14 @@
     const details = row => row ? `${formatDateOnly(row.periodStart)} → ${formatDateOnly(row.asOf)} · relevé manuel`
       : 'Rapport du store à renseigner';
     return `<section class="card downloads-panel">
-      <div class="card-head"><div><p class="eyebrow">Diffusion de RouteStop</p><h3>Premiers téléchargements</h3>
-      <p>Chiffres des stores, distincts des comptes inscrits. Aucun suivi supplémentaire dans l’application.</p></div><span class="pill muted">Relevés manuels</span></div>
-      <div class="downloads-grid">
-        ${kpiCard('Total iOS + Android', summary.total ?? '—', summary.total === null ? 'Deux rapports sur la même période requis' : details(summary.ios))}
-        ${kpiCard('iPhone · App Store', summary.ios?.firstDownloads ?? '—', details(summary.ios))}
-        ${kpiCard('Android · Google Play', summary.android?.firstDownloads ?? '—', details(summary.android))}
+      <p class="hint">Premiers téléchargements · relevés manuels</p>
+      <div class="download-strip platform-breakdown">
+        <div><strong>iPhone · ${summary.ios ? formatNumber(summary.ios.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.ios))}</p></div>
+        <div><strong>Android · ${summary.android ? formatNumber(summary.android.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.android))}</p></div>
       </div>
-      <p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques et ne s’actualise pas automatiquement.</p>
-      <details><summary>Renseigner un relevé officiel</summary>
+      ${summary.total === null ? '<p class="hint">Total indisponible : deux relevés sur la même période sont nécessaires.</p>' : ''}
+      <details class="small-help"><summary>Que comptent ces chiffres ?</summary><p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques et ne s’actualise pas automatiquement.</p></details>
+      <details class="download-entry"><summary>Mettre à jour un relevé</summary>
         <p class="hint">Apple : « Premiers téléchargements » ou « Unités » dans Tendances, filtrées sur RouteStop. Google : « Acquisition d’utilisateurs » → « Nouveaux utilisateurs ». Choisir tous les pays et la même période. Pour un total depuis le lancement, prendre une date de début antérieure au lancement des deux versions. Ne pas utiliser « Audience ayant installé l’application ». Chaque store conserve son fuseau de reporting.</p>
         <div class="store-links"><a class="ghost" href="https://appstoreconnect.apple.com/trends" target="_blank" rel="noopener noreferrer">Ouvrir App Store Connect</a>
         <a class="ghost" href="https://play.google.com/console/u/0/developers/5130624800963001569/app/4974573420398337108/statistics" target="_blank" rel="noopener noreferrer">Ouvrir Google Play</a></div>
@@ -642,7 +629,8 @@
         p_platform: fields.get('platform'), p_period_start: fields.get('periodStart'),
         p_as_of: fields.get('asOf'), p_first_downloads: count,
       }));
-      await loadView('home', true);
+      invalidate('home', 'stats');
+      await loadView('stats', true);
       showFeedback('Relevé enregistré. La date de couverture reste affichée.');
     } catch {
       showFeedback('Relevé non enregistré. Vérifie les dates (pas de journée en cours) et ta connexion.');
@@ -657,7 +645,7 @@
     const releases = payload.releases ?? {};
     const operations = payload.operations ?? {};
     const latestSyncs = currentSyncRows(data.latestSyncs);
-    const errors = latestSyncs.filter((item) => item.status === 'error' && !isAutomaticRetryPending(item));
+    const errors = latestSyncs.filter(isActionableDataRun);
     const transientErrors = latestSyncs.filter(isAutomaticRetryPending);
     const partials = latestSyncs.filter((item) => item.status === 'partial');
 
@@ -675,21 +663,22 @@
       tasks.push({
         icon: '!',
         tone: 'danger',
-        title: `${errors.length} source${errors.length > 1 ? 's' : ''} en échec`,
-        text: 'Les anciennes données restent disponibles. Une relance est possible.',
+        title: `${errors.length} source${errors.length > 1 ? 's' : ''} à vérifier`,
+        text: 'Données anciennes, collecte incomplète ou échec : vérifie le détail avant de relancer.',
         view: 'data',
         action: 'Vérifier',
       });
-    } else if (transientErrors.length) {
+    }
+    if (transientErrors.length) {
       tasks.push({
         icon: '↻',
         tone: 'warning',
-        title: `${transientErrors.length} zone${transientErrors.length > 1 ? 's' : ''} à relancer`,
+        title: `${transientErrors.length} reprise${transientErrors.length > 1 ? 's' : ''} automatique${transientErrors.length > 1 ? 's' : ''} prévue${transientErrors.length > 1 ? 's' : ''}`,
         text: 'La source publique a été trop lente. Une relance automatique est prévue sans supprimer les anciennes données.',
         view: 'data',
         action: 'Suivre',
       });
-    } else if (partials.length) {
+    } else if (!errors.length && partials.length) {
       tasks.push({
         icon: '•',
         tone: 'warning',
@@ -722,7 +711,7 @@
       tasks.push({
         icon: '↑',
         tone: '',
-        title: 'Version en cours de traitement',
+        title: isStaleRelease(releases.latest) ? 'Ancien suivi de livraison à vérifier' : 'Livraison en cours de traitement',
         text: releaseStatusText(releases.latest),
         view: 'releases',
         action: 'Suivre',
@@ -805,10 +794,11 @@
 
   function homeSourceRow(title, run, detail) {
     const tone = syncRunTone(run);
+    const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="source-row">
-        <span class="row-icon ${tone}">${run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
-        <div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)} · ${escapeHtml(syncDatesLabel(run))}</p></div>
+        <span class="row-icon ${tone}">${tone === 'success' ? '✓' : run ? '!' : '?'}</span>
+        <div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)} · Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}</p></div>
         <span class="pill ${tone}">${escapeHtml(syncRunStatusLabel(run))}</span>
       </div>
     `;
@@ -820,12 +810,12 @@
     const transientErrors = runs.filter(isAutomaticRetryPending).length;
     const partials = runs.filter((run) => run.status === 'partial').length;
     const tone = errors ? 'danger' : transientErrors || partials || successes < APPLICABLE_OSM_REGIONS.length ? 'warning' : 'success';
-    const latest = [...runs].sort((a, b) => dateValue(b.finishedAt || b.startedAt) - dateValue(a.finishedAt || a.startedAt))[0];
+    const toFollow = APPLICABLE_OSM_REGIONS.length - successes;
     return `
       <div class="source-row">
         <span class="row-icon ${tone}">${tone === 'success' ? '✓' : '!'}</span>
         <div><strong>Restaurants et services</strong><p>${successes}/${APPLICABLE_OSM_REGIONS.length} secteurs actualisés sous 48 h · 1 non applicable</p></div>
-        <span class="pill ${tone}">${errors ? `${errors} échec${errors > 1 ? 's' : ''}` : transientErrors ? `${transientErrors} à relancer` : tone === 'success' ? 'À jour' : 'À suivre'}</span>
+        <span class="pill ${tone}">${toFollow ? `${toFollow} zones à suivre` : errors ? 'Échec de tentative' : transientErrors ? 'Reprise prévue' : tone === 'success' ? 'À jour' : 'À suivre'}</span>
       </div>
     `;
   }
@@ -845,14 +835,63 @@
     });
   }
 
+  function sortedOsmRegions(runs) {
+    return [...APPLICABLE_OSM_REGIONS].sort((first, second) => {
+      const timestamp = region => {
+        const run = runs.find(item => item.region === region);
+        return dateValue(run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null));
+      };
+      return timestamp(first) - timestamp(second) || REGION_LABELS[first].localeCompare(REGION_LABELS[second], 'fr');
+    });
+  }
+
+  function renderFuelLinks() {
+    $('links-view').innerHTML = `
+      ${renderFuelLinkCandidatePanel()}
+      <details class="card data-details">
+        <summary><div><strong>Corrections administrateur existantes (${state.overrides.length})</strong><p>Réservé aux corrections confirmées : ces réglages peuvent affecter l’application.</p></div></summary>
+        <div class="stack data-details-body">${state.overrides.length ? state.overrides.map(renderOverride).join('') : emptyInline('Aucune correction chargée.')}</div>
+        ${state.overrides.length === 200 ? '<p class="hint">Les 200 dernières corrections sont chargées, pas un inventaire exhaustif.</p>' : ''}
+      </details>
+    `;
+    applyFuelCandidateFilters();
+  }
+
+  function pageBounds(total, requestedPage) {
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const page = Math.max(1, Math.min(pages, requestedPage));
+    return { page, pages, start: (page - 1) * PAGE_SIZE, end: Math.min(page * PAGE_SIZE, total) };
+  }
+
+  function paginationMarkup(group) {
+    return `<nav class="pagination" aria-label="Pages des ${group === 'fuel' ? 'correspondances' : 'signalements'}">
+      <button class="ghost small" data-list-page="${group}" data-step="-1" type="button">← Précédent</button>
+      <span id="${group}-page-label" role="status"></span>
+      <button class="ghost small" data-list-page="${group}" data-step="1" type="button">Suivant →</button>
+    </nav>`;
+  }
+
+  function updatePagination(group, bounds, total) {
+    setText(`${group}-page-label`, `${total ? bounds.start + 1 : 0}–${bounds.end} sur ${total} · page ${bounds.page}/${bounds.pages}`);
+    document.querySelectorAll(`[data-list-page="${group}"]`).forEach(button => {
+      button.disabled = Number(button.dataset.step) < 0 ? bounds.page === 1 : bounds.page === bounds.pages;
+    });
+  }
+
+  function applyReportPage() {
+    const rows = Array.from(document.querySelectorAll('#reports-list .report'));
+    const bounds = pageBounds(rows.length, reportsPage);
+    reportsPage = bounds.page;
+    rows.forEach((row, index) => row.classList.toggle('hidden', index < bounds.start || index >= bounds.end));
+    updatePagination('reports', bounds, rows.length);
+  }
+
   function renderReports() {
     const list = visibleReports();
-    const pendingCount = state.reports.filter((report) => report.status === 'pending').length;
-    setText('pending-nav-count', pendingCount);
-    $('pending-nav-count').classList.toggle('hidden', pendingCount === 0);
-    $('reports-list').innerHTML = list.length
-      ? list.map(renderReport).join('')
-      : `<div class="empty">Aucun signalement dans cette vue.</div>`;
+    $('reports-list').innerHTML = `${paginationMarkup('reports')}
+      ${state.reports.length === 250 ? '<p class="hint">Recherche limitée aux 250 derniers signalements chargés.</p>' : ''}
+      ${list.length ? list.map(renderReport).join('') : '<div class="empty">Aucun signalement dans cette vue.</div>'}`;
+    applyReportPage();
   }
 
   function renderReport(report) {
@@ -948,6 +987,12 @@
   }
 
   async function handleReportAction(event) {
+    const pageButton = event.target.closest('[data-list-page="reports"]');
+    if (pageButton) {
+      reportsPage += Number(pageButton.dataset.step);
+      applyReportPage();
+      return;
+    }
     const button = event.target.closest('button[data-report-action]');
     if (!button) return;
     const id = button.dataset.id;
@@ -1002,9 +1047,14 @@
       p_override: payload,
     });
     if (error) throw error;
-    invalidate('home', 'actions', 'data');
+    invalidate('home', 'actions', 'data', 'links');
     await loadView('actions', true);
     showFeedback('Décision enregistrée.');
+  }
+
+  function needsSyncAttention(run) {
+    return !isNotApplicable(run) && (!run || !isSyncDataFresh(run) || ACTIVE_SYNC_STATUSES.has(run.status)
+      || ['error', 'partial', 'never'].includes(run.status) || isAutomaticRetryPending(run));
   }
 
   function renderData() {
@@ -1022,57 +1072,48 @@
     const activeRuns = latest.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
     const actionableRuns = latest.filter((run) => isActionableDataRun(run) && !isMatchingSyncActive(run, activeRuns));
     const automaticRetries = latest.filter((run) => isAutomaticRetryPending(run) && !isMatchingSyncActive(run, activeRuns));
-    const osmSuccesses = osmRuns.filter(isSyncDataFresh).length;
     const fuelActive = activeRuns.some((run) => run.source === 'fuel_prices_gov');
     const officialActive = activeRuns.some((run) => run.source === 'service_areas_operator');
-    const osmActive = activeRuns.some((run) => run.source === 'service_areas_osm');
+
+    const shownRegions = sortedOsmRegions(osmRuns).filter(region => dataScope === 'all' || needsSyncAttention(osmRuns.find(run => run.region === region)));
+    const showFuel = dataScope === 'all' || needsSyncAttention(fuel);
+    const showOfficial = dataScope === 'all' || needsSyncAttention(official);
 
     $('data-view').innerHTML = `
-      <section class="kpi-grid">
-        ${kpiCard('Actions requises', actionableRuns.length, actionableRuns.length ? 'À relancer ci-dessous' : 'Aucune intervention')}
-        ${kpiCard('Secteurs actualisés sous 48 h', `${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length}`, '17 secteurs suivis · 1 non applicable')}
-        ${kpiCard(
-          'Stations avec prix disponible',
-          counts.fuelPrices ?? 0,
-          counts.fuelPriceRows != null
-            ? `${formatNumber(counts.fuelPrices ?? 0)} exploitables sur ${formatNumber(counts.fuelPriceRows)} lignes reçues`
-            : 'Source officielle des prix',
-        )}
-        ${kpiCard('Corrections actives', counts.activeOverrides ?? 0, 'Modifications admin')}
-      </section>
-
+      <div class="segmented data-scope" role="group" aria-label="Filtrer les mises à jour">
+        <button data-data-scope="attention" class="${dataScope === 'attention' ? 'active' : ''}" type="button">À suivre</button>
+        <button data-data-scope="all" class="${dataScope === 'all' ? 'active' : ''}" type="button">Toutes les sources</button>
+      </div>
       ${renderDataActionPanel(actionableRuns, automaticRetries)}
 
-      <section class="source-grid">
-        ${renderSyncCard({
+      ${showFuel || showOfficial ? '<section class="source-grid sync-sources">' : ''}
+        ${showFuel ? renderSyncCard({
           title: 'Prix carburant',
           description: 'Prix officiels du gouvernement.',
           run: fuel,
           target: 'fuel_prices',
           active: fuelActive,
-        })}
-        ${renderSyncCard({
+        }) : ''}
+        ${showOfficial ? renderSyncCard({
           title: 'Aires officielles',
           description: 'VINCI, APRR et SANEF.',
           run: official,
           target: 'service_areas',
           active: officialActive,
-        })}
-        ${renderOsmSyncCard(osmRuns, osmActive, actionableRuns)}
-      </section>
+        }) : ''}
 
-      ${renderFuelLinkCandidatePanel()}
+      ${showFuel || showOfficial ? '</section>' : ''}
 
       <section class="section-grid">
-        <details class="card wide-card data-details" id="osm-zone-status">
-          <summary>
-            <div><strong>État des ${OSM_REGIONS.length} secteurs</strong><p>Dernière réussite et dernière tentative sont séparées. Les données précédentes restent disponibles.</p></div>
-            <span class="pill ${osmSuccesses < APPLICABLE_OSM_REGIONS.length ? 'warning' : 'success'}">${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length} sous 48 h</span>
-          </summary>
-          <div class="zone-list data-details-body">
-            ${OSM_REGIONS.map((region) => renderOsmZoneRow(region, osmRuns, activeRuns)).join('')}
+        <section class="card wide-card regions-panel" id="osm-zone-status">
+          <div class="card-head">
+            <div><h3>Zones de services</h3></div>
           </div>
-        </details>
+          <div class="zone-list">
+            ${shownRegions.length ? shownRegions.map(region => renderOsmZoneRow(region, osmRuns, activeRuns)).join('') : emptyInline('Aucune zone à relancer.')}
+          </div>
+          <details class="small-help"><summary>En savoir plus</summary><p>16 zones suivies. Bretagne ouest : hors filtre autoroutier actuel. Une tentative en échec ne remplace pas la date de la dernière collecte complète.</p></details>
+        </section>
 
         <details class="card wide-card data-details">
           <summary>
@@ -1096,7 +1137,7 @@
               <p>${formatNumber(counts.serviceAreasFuelSignal ?? 0)} avec carburant · ${formatNumber(counts.serviceAreasWithoutFuelSignal ?? 0)} sans carburant. Les fiches sont parfois séparées par sens et ne représentent pas des aires physiques uniques.</p>
             </article>
             <article>
-              <span>Stations officielles avec prix</span>
+              <span>Stations avec prix disponible</span>
               <strong>${formatNumber(counts.fuelPrices ?? 0)}</strong>
               <p>${formatNumber(counts.fuelPriceRows ?? counts.fuelPrices ?? 0)} lignes reçues, dont ${formatNumber(counts.fuelPrices ?? 0)} contiennent au moins un prix officiel exploitable.</p>
             </article>
@@ -1108,17 +1149,8 @@
           </div>
         </details>
 
-        <article class="card wide-card">
-          <details ${state.overrides.length && state.overrides.length <= 5 ? 'open' : ''}>
-            <summary><strong>Corrections administrateur (${state.overrides.length})</strong></summary>
-            <div class="stack" style="margin-top:14px">
-              ${state.overrides.length ? state.overrides.map(renderOverride).join('') : emptyInline('Aucune correction active.')}
-            </div>
-          </details>
-        </article>
       </section>
     `;
-    applyFuelCandidateFilters();
   }
 
   function fuelCandidateCategory(candidate) {
@@ -1284,10 +1316,6 @@
 
     const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
     const summary = payload.summary ?? {};
-    const closeCount = Number(summary.within150m) || candidates.filter((item) => fuelCandidateCategory(item) === 'close').length;
-    const reviewCount = (Number(summary.between151And500m) || 0) + (Number(summary.between501And1000m) || 0)
-      || candidates.filter((item) => fuelCandidateCategory(item) === 'review').length;
-    const farCount = Number(summary.over1000m) || candidates.filter((item) => fuelCandidateCategory(item) === 'far').length;
     const savedCount = Number(summary.savedForReview)
       || candidates.filter((item) => item.review?.areaId).length;
 
@@ -1297,16 +1325,11 @@
           <div>
             <p class="eyebrow">Couverture carburant</p>
             <h3>Correspondances à vérifier</h3>
-            <p>${formatNumber(candidates.length)} stations officielles avec prix ne sont pas encore reliées exactement à une fiche d’aire. Tu peux préparer les choix sans modifier l’application.</p>
+            <p>${formatNumber(candidates.length)} propositions à examiner. Enregistrer un choix ne change pas l’application.</p>
           </div>
           <span class="pill info">Préparation sans activation</span>
         </div>
-        <div class="fuel-link-summary">
-          <div><span>Très proches</span><strong>${formatNumber(closeCount)}</strong><small>0 à 150 m</small></div>
-          <div><span>À vérifier</span><strong>${formatNumber(reviewCount)}</strong><small>151 m à 1 km</small></div>
-          <div><span>Aire à identifier</span><strong>${formatNumber(farCount)}</strong><small>Plus de 1 km</small></div>
-          <div><span>Choix enregistrés</span><strong>${formatNumber(savedCount)}</strong><small>Sans effet sur l’app</small></div>
-        </div>
+        <p class="hint">${formatNumber(savedCount)} choix préparé${savedCount === 1 ? '' : 's'} · Les propositions ne sont pas des erreurs confirmées.</p>
         <div class="fuel-link-toolbar">
           <div class="filter-tabs" role="group" aria-label="Filtrer les correspondances">
             <button class="${fuelLinkFilter === 'all' ? 'active' : ''}" data-fuel-link-filter="all" type="button">Toutes</button>
@@ -1318,6 +1341,8 @@
           <label class="fuel-link-search">Rechercher<input data-fuel-link-search value="${escapeHtml(fuelLinkSearch)}" placeholder="Ville, aire, A6, identifiant…" /></label>
         </div>
         <div class="fuel-link-result-line"><strong id="fuel-candidate-visible">${formatNumber(candidates.length)} correspondances affichées</strong><span>Aucun choix n’est envoyé aux applications</span></div>
+        ${paginationMarkup('fuel')}
+        <div class="empty hidden" id="fuel-candidate-empty">Aucune correspondance pour ces filtres.</div>
         <div class="fuel-candidate-list">
           ${candidates.length ? candidates.map(renderFuelLinkCandidate).join('') : emptyInline('Toutes les stations officielles sont déjà reliées.')}
         </div>
@@ -1327,61 +1352,34 @@
 
   function applyFuelCandidateFilters() {
     const rows = Array.from(document.querySelectorAll('[data-fuel-candidate]'));
-    if (!rows.length) return;
-    let visible = 0;
-    for (const row of rows) {
-      const matchesCategory = fuelLinkFilter === 'all'
-        || (fuelLinkFilter === 'saved' ? row.dataset.saved === 'true' : row.dataset.category === fuelLinkFilter);
-      const matchesSearch = !fuelLinkSearch || (row.dataset.search || '').includes(fuelLinkSearch);
-      const show = matchesCategory && matchesSearch;
-      row.classList.toggle('hidden', !show);
-      if (show) visible += 1;
-    }
-    setText('fuel-candidate-visible', `${formatNumber(visible)} correspondance${visible > 1 ? 's' : ''} affichée${visible > 1 ? 's' : ''}`);
+    const matches = rows.filter(row => (fuelLinkFilter === 'all'
+      || (fuelLinkFilter === 'saved' ? row.dataset.saved === 'true' : row.dataset.category === fuelLinkFilter))
+      && (!fuelLinkSearch || (row.dataset.search || '').includes(fuelLinkSearch)));
+    const bounds = pageBounds(matches.length, fuelLinkPage);
+    fuelLinkPage = bounds.page;
+    const visible = new Set(matches.slice(bounds.start, bounds.end));
+    rows.forEach(row => row.classList.toggle('hidden', !visible.has(row)));
+    setText('fuel-candidate-visible', `${formatNumber(matches.length)} proposition${matches.length > 1 ? 's' : ''} · 20 maximum par page`);
+    setHidden('fuel-candidate-empty', matches.length !== 0 || rows.length === 0);
+    updatePagination('fuel', bounds, matches.length);
   }
 
   function handleDataInput(event) {
     const searchInput = event.target.closest('[data-fuel-link-search]');
     if (!searchInput) return;
     fuelLinkSearch = searchInput.value.trim().toLowerCase();
+    fuelLinkPage = 1;
     applyFuelCandidateFilters();
   }
 
   function renderDataActionPanel(actionableRuns, automaticRetries) {
-    const actionableOsmRuns = actionableRuns.filter((run) => run.source === 'service_areas_osm' && run.region);
+    const regions = actionableRuns.filter(run => run.source === 'service_areas_osm' && run.region);
     const bulk = state.bulkSync;
-    const tone = actionableRuns.length ? 'danger' : automaticRetries.length ? 'warning' : 'success';
-    const title = bulk.active
-      ? `Relance progressive ${bulk.completed}/${bulk.total}`
-      : actionableRuns.length ? `${actionableRuns.length} action${actionableRuns.length > 1 ? 's' : ''} requise${actionableRuns.length > 1 ? 's' : ''}`
-        : automaticRetries.length ? 'Relance automatique prévue' : 'Aucune action requise';
-    const detail = bulk.active
-      ? `${REGION_LABELS[bulk.region] || 'Zone'} est en cours. La zone suivante attendra la fin de celle-ci. Garde cette page ouverte.`
-      : actionableRuns.length ? 'Les anciennes données restent disponibles pendant la relance.'
-        : automaticRetries.length ? 'La source publique sera retentée automatiquement. Aucune manipulation nécessaire.'
-          : 'Toutes les sources sont utilisables. Les données techniques restent accessibles plus bas.';
-
-    return `
-      <section class="data-action-panel ${tone}">
-        <div class="data-action-head">
-          <div>
-            <p class="eyebrow">À traiter maintenant</p>
-            <h3>${escapeHtml(title)}</h3>
-            <p>${escapeHtml(detail)}</p>
-          </div>
-          ${actionableOsmRuns.length > 1 || bulk.active ? `
-            <button class="${bulk.active ? 'ghost' : ''}" data-sync-all-regions type="button" ${bulk.active ? 'disabled' : ''}>
-              ${bulk.active ? `${bulk.completed}/${bulk.total} zones` : `Relancer les ${actionableOsmRuns.length} zones`}
-            </button>
-          ` : ''}
-        </div>
-        <div class="data-action-list">
-          ${actionableRuns.map((run) => renderDataActionRow(run, false)).join('')}
-          ${automaticRetries.map((run) => renderDataActionRow(run, true)).join('')}
-          ${!actionableRuns.length && !automaticRetries.length ? '<div class="data-clear-state"><span>✓</span><p>Rien à chercher dans l’historique : aucune relance manuelle n’est nécessaire.</p></div>' : ''}
-        </div>
-      </section>
-    `;
+    return `<div class="sync-action-bar">
+      <span>${bulk.active ? `Relance ${bulk.completed}/${bulk.total} · ${escapeHtml(REGION_LABELS[bulk.region] || 'Zone')}` : 'Les anciennes données restent disponibles.'}</span>
+      ${regions.length > 1 || bulk.active ? `<button data-sync-all-regions type="button" ${bulk.active ? 'disabled' : ''}>${bulk.active ? 'Relance en cours…' : 'Relancer les zones en attente'}</button>` : ''}
+      ${automaticRetries.length ? `<p class="hint">${automaticRetries.length} reprise(s) automatique(s) prévue(s).</p>` : ''}
+    </div>`;
   }
 
   function renderDataActionRow(run, automatic) {
@@ -1452,15 +1450,21 @@
     const active = activeRuns.some((item) => item.source === 'service_areas_osm' && item.region === region);
     const tone = active ? 'info' : syncRunTone(run);
     const status = active ? 'En cours' : syncRunStatusLabel(run);
-    const detail = isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.'
-      : `${escapeHtml(syncDatesLabel(run))}${run?.message ? `<br>${escapeHtml(friendlySyncError(run.message))}` : ''}`;
     const progress = run?.checkpoint;
+    const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
-      <div class="zone-row">
-        <span class="row-icon ${tone}">${active ? '↻' : run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
-        <div><strong>${escapeHtml(REGION_LABELS[region])}</strong><p>${detail}</p>${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/4 portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}</div>
+      <div class="zone-row compact-zone">
+        <div class="zone-description">
+          <strong>${escapeHtml(REGION_LABELS[region])}</strong>
+          <p>Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}</p>
+          <details><summary>Détail de la collecte</summary>
+            <p>${isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.' : escapeHtml(syncDatesLabel(run))}</p>
+            ${run?.message ? `<p>${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
+            ${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/4 portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}
+          </details>
+        </div>
         <span class="pill ${tone}">${escapeHtml(status)}</span>
-        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) ? 'disabled' : ''}>${progress ? 'Reprendre' : 'Actualiser'}</button>
+        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) || isAutomaticRetryPending(run) ? 'disabled' : ''}>${active ? 'En cours' : isAutomaticRetryPending(run) ? 'Reprise prévue' : progress ? 'Reprendre' : 'Actualiser'}</button>
       </div>
     `;
   }
@@ -1543,8 +1547,8 @@
         p_note: note,
       });
       if (error) throw error;
-      invalidate('home', 'data');
-      await loadView('data', true);
+      invalidate('home', 'data', 'links');
+      await loadView('links', true);
       showFeedback('Choix enregistré pour vérification, sans effet sur l’application.');
     } catch (error) {
       showFeedback(fuelReviewErrorMessage(error));
@@ -1566,8 +1570,8 @@
         p_station_id: stationId,
       });
       if (error) throw error;
-      invalidate('home', 'data');
-      await loadView('data', true);
+      invalidate('home', 'data', 'links');
+      await loadView('links', true);
       showFeedback('Choix préparatoire annulé. L’application reste inchangée.');
     } catch (error) {
       showFeedback('Le choix préparatoire n’a pas pu être annulé.');
@@ -1577,6 +1581,18 @@
   }
 
   async function handleDataAction(event) {
+    const scopeButton = event.target.closest('[data-data-scope]');
+    if (scopeButton) {
+      dataScope = scopeButton.dataset.dataScope === 'all' ? 'all' : 'attention';
+      renderData();
+      return;
+    }
+    const pageButton = event.target.closest('[data-list-page="fuel"]');
+    if (pageButton) {
+      fuelLinkPage += Number(pageButton.dataset.step);
+      applyFuelCandidateFilters();
+      return;
+    }
     const saveFuelReviewButton = event.target.closest('button[data-save-fuel-review]');
     if (saveFuelReviewButton) {
       await saveFuelLinkReview(saveFuelReviewButton);
@@ -1590,6 +1606,7 @@
     const filterButton = event.target.closest('button[data-fuel-link-filter]');
     if (filterButton) {
       fuelLinkFilter = filterButton.dataset.fuelLinkFilter || 'all';
+      fuelLinkPage = 1;
       document.querySelectorAll('button[data-fuel-link-filter]').forEach((button) => {
         button.classList.toggle('active', button === filterButton);
       });
@@ -1766,8 +1783,8 @@
         })
         .eq('id', id);
       if (error) throw error;
-      invalidate('home', 'data');
-      await loadView('data', true);
+      invalidate('home', 'data', 'links');
+      await loadView('links', true);
       showFeedback('Correction enregistrée.');
     } catch (error) {
       showFeedback('La correction n’a pas pu être enregistrée.');
@@ -1778,100 +1795,40 @@
 
   function renderReleases() {
     const releases = state.releases;
-    const latest = releases[0] ?? null;
-    const command = 'npm run update:production -- --message "Description de la mise à jour"';
-    const previewCommand = 'npm run update:preview -- --message "Test avant production"';
-    const iosCommand = 'npm run build:ios:testflight -- --message "Nouvelle version iOS"';
-    const androidPreviewCommand = 'npm run build:android:internal -- --message "Test Android sur téléphone"';
-    const androidPlayCommand = 'npm run build:android:play -- --message "Nouvelle version Android"';
-    const heroStatus = latest ? releaseStatusText(latest) : 'Suivi prêt';
-    const heroTitle = latest ? releaseLabel(latest) : 'Prochaine mise à jour';
-    const heroMessage = latest
-      ? latest.error_summary || latest.message || 'Statut enregistré automatiquement.'
-      : 'Les prochaines mises à jour EAS seront enregistrées ici du contrôle initial au résultat final.';
-    const progress = latest ? releaseProgress(latest) : 0;
-
+    const commands = [
+      ['Test avant production', 'npm run update:preview -- --message "Test avant production"'],
+      ['Mise à jour après validation', 'npm run update:production -- --message "Description de la mise à jour"'],
+      ['Build iOS pour TestFlight', 'npm run build:ios:testflight -- --message "Nouvelle version iOS"'],
+      ['APK Android de test', 'npm run build:android:internal -- --message "Test Android sur téléphone"'],
+      ['AAB Android pour Google Play', 'npm run build:android:play -- --message "Nouvelle version Android"'],
+    ];
     $('releases-view').innerHTML = `
-      <section class="release-hero">
-        <div>
-          <p class="eyebrow">${escapeHtml(heroStatus)}</p>
-          <h3>${escapeHtml(heroTitle)}</h3>
-          <p>${escapeHtml(heroMessage)}</p>
-          <div class="progress"><i style="width:${progress}%"></i></div>
-        </div>
-        <div class="release-side">
-          <strong>${latest ? escapeHtml(relativeDate(latest.updated_at)) : '—'}</strong>
-          <span>${latest ? escapeHtml(latest.channel || latest.environment) : 'Aucune publication suivie'}</span>
-        </div>
-      </section>
-
-      <section class="release-tools">
-        <div>
-          <strong>Choisir le bon type de livraison</strong>
-          <p>Interface ou JavaScript : mise à jour OTA. Icône, permission ou dépendance native : nouveau build.</p>
-        </div>
-        <a href="${EXPO_BUILDS_URL}" target="_blank" rel="noopener noreferrer">Ouvrir les builds Expo</a>
-      </section>
-
+      <p class="hint">Ce journal suit les livraisons enregistrées. Un build prêt ou une mise à jour OTA ne prouve pas la disponibilité d’une version sur les stores.</p>
       <section class="section-grid">
-        <article class="card wide-card">
-          <div class="card-head"><div><h3>Correction sans nouveau build</h3><p>À utiliser pour les changements d’interface ou de logique JavaScript.</p></div></div>
-          <div class="release-command-grid">
-            <div class="command-block">
-              <h4>1. Tester sur le canal preview</h4>
-              <div class="command-wrap">
-                <pre class="command">${escapeHtml(previewCommand)}</pre>
-                <button class="ghost small" data-copy-command="${escapeHtml(previewCommand)}" type="button">Copier</button>
-              </div>
-            </div>
-            <div class="command-block">
-              <h4>2. Publier en production après validation</h4>
-              <div class="command-wrap">
-                <pre class="command">${escapeHtml(command)}</pre>
-                <button class="ghost small" data-copy-command="${escapeHtml(command)}" type="button">Copier</button>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head"><div><h3>Nouvelle version iOS</h3><p>Build natif pour TestFlight puis l’App Store.</p></div></div>
-          <div class="command-wrap">
-            <pre class="command">${escapeHtml(iosCommand)}</pre>
-            <button class="ghost small" data-copy-command="${escapeHtml(iosCommand)}" type="button">Copier</button>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-head"><div><h3>Nouvelle version Android</h3><p>Commencer par l’APK installable. Créer l’AAB seulement après validation.</p></div></div>
-          <div class="command-block">
-            <h4>APK de test sur téléphone</h4>
-            <div class="command-wrap">
-              <pre class="command">${escapeHtml(androidPreviewCommand)}</pre>
-              <button class="ghost small" data-copy-command="${escapeHtml(androidPreviewCommand)}" type="button">Copier</button>
-            </div>
-          </div>
-          <div class="command-block">
-            <h4>AAB pour le test fermé Google Play</h4>
-            <div class="command-wrap">
-              <pre class="command">${escapeHtml(androidPlayCommand)}</pre>
-              <button class="ghost small" data-copy-command="${escapeHtml(androidPlayCommand)}" type="button">Copier</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="card wide-card">
-          <div class="card-head"><div><h3>Historique des versions</h3><p>Plateforme, environnement et état réel de chaque livraison.</p></div></div>
-          <div class="history-list">
-            ${releases.length ? releases.map(renderReleaseRow).join('') : emptyInline('Aucune version suivie pour le moment.')}
-          </div>
-        </article>
+        ${['ios', 'android'].map(platform => {
+          const latest = releases.find(release => release.platform === platform || release.platform === 'all');
+          return `<article class="card"><div class="card-head"><div><h3>${platform === 'ios' ? 'iPhone' : 'Android'}</h3><p>Dernière livraison enregistrée</p></div></div>
+            ${latest ? renderReleaseRow(latest) : emptyInline('Aucune livraison identifiée pour cette plateforme.')}</article>`;
+        }).join('')}
       </section>
+      <details class="card data-details">
+        <summary><div><strong>Historique des livraisons</strong><p>Un statut inchangé depuis plus de 7 jours est signalé, sans modifier l’enregistrement.</p></div></summary>
+        <div class="history-list data-details-body">${releases.length ? releases.map(renderReleaseRow).join('') : emptyInline('Aucune livraison enregistrée.')}</div>
+        ${releases.length === 100 ? '<p class="hint">Les 100 derniers enregistrements sont chargés.</p>' : ''}
+      </details>
+      <details class="card data-details">
+        <summary><div><strong>Commandes techniques</strong><p>Copier une commande ne lance aucune publication.</p></div></summary>
+        <div class="data-details-body">
+          <p class="hint">Interface ou JavaScript : OTA. Icône, permission ou dépendance native : nouveau build. Toujours tester avant publication.</p>
+          <p><a href="${EXPO_BUILDS_URL}" target="_blank" rel="noopener noreferrer">Ouvrir les builds Expo</a></p>
+          ${commands.map(([label, command]) => `<div class="command-block"><h4>${escapeHtml(label)}</h4><div class="command-wrap"><pre class="command">${escapeHtml(command)}</pre><button class="ghost small" data-copy-command="${escapeHtml(command)}" type="button">Copier</button></div></div>`).join('')}
+        </div>
+      </details>
     `;
   }
 
   function renderReleaseRow(release) {
-    const tone = releaseTone(release.status);
+    const tone = isStaleRelease(release) ? 'warning' : releaseTone(release.status);
     const externalUrl = safeExternalUrl(release.external_url);
     const dates = [
       relativeDate(release.updated_at),
@@ -1907,56 +1864,7 @@
   }
 
   function renderStats() {
-    const analytics = state.analytics;
-    if (!analytics) {
-      $('stats-view').innerHTML = loadingMarkup('des statistiques');
-      return;
-    }
-    const totals = analytics.totals ?? {};
-    const daily = Array.isArray(analytics.daily) ? analytics.daily : [];
-    const topRoutes = Array.isArray(analytics.topRoutes) ? analytics.topRoutes : [];
-    const topStations = Array.isArray(analytics.topStations) ? analytics.topStations : [];
-    const topBrands = Array.isArray(analytics.topBrands) ? analytics.topBrands : [];
-    const fuelPreferences = Array.isArray(analytics.fuelPreferences) ? analytics.fuelPreferences : [];
-
-    $('stats-view').innerHTML = `
-      <div class="toolbar">
-        <div><strong>Période analysée</strong><p class="hint">Les calculs restent agrégés et rapides.</p></div>
-        <div class="segmented" id="analytics-period">
-          ${[7, 30, 90].map((days) => `<button class="${state.analyticsDays === days ? 'active' : ''}" data-analytics-days="${days}" type="button">${days} jours</button>`).join('')}
-        </div>
-      </div>
-
-      <section class="kpi-grid">
-        ${kpiCard('Utilisateurs actifs', totals.activeUsers ?? 0, `Sur ${analytics.days} jours`)}
-        ${kpiCard('Recherches trajet', totals.routeSearches ?? 0, 'Demandes de trajet')}
-        ${kpiCard('Fiches consultées', totals.stationViews ?? 0, 'Ouvertures d’aires')}
-        ${kpiCard('Distance moyenne', totals.averageDistanceKm ?? 0, 'Kilomètres par trajet')}
-      </section>
-
-      <section class="section-grid">
-        <article class="card chart-card wide-card">
-          <div class="card-head"><div><h3>Recherches de trajet</h3><p>Évolution quotidienne sur la période.</p></div><span class="pill info">${formatNumber(totals.routeSearches ?? 0)} total</span></div>
-          ${renderSparkline(daily)}
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Trajets les plus recherchés</h3><p>Départ et destination déclarés.</p></div></div>
-          ${renderBarList(topRoutes, (item) => `${item.departure} → ${item.arrival}`, (item) => item.searches)}
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Aires les plus consultées</h3><p>Consultations de fiches.</p></div></div>
-          ${renderBarList(topStations, (item) => item.name, (item) => item.views)}
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Enseignes consultées</h3><p>Répartition des vues d’aires.</p></div></div>
-          ${renderBarList(topBrands, (item) => item.brand, (item) => item.views)}
-        </article>
-        <article class="card">
-          <div class="card-head"><div><h3>Carburants préférés</h3><p>Préférences enregistrées dans les comptes.</p></div></div>
-          ${renderBarList(fuelPreferences, (item) => item.fuel, (item) => item.users)}
-        </article>
-      </section>
-    `;
+    $('stats-view').innerHTML = renderStoreDownloads();
   }
 
   function renderSparkline(rows) {
@@ -2005,12 +1913,13 @@
     state.analyticsDays = days;
     invalidate('stats');
     await loadView('stats', true);
+    if ($('usage-details')) $('usage-details').open = true;
   }
 
   function renderMaintenance() {
     const operations = state.operations;
     if (!operations) {
-      $('maintenance-view').innerHTML = loadingMarkup('de la maintenance');
+      $('maintenance-view').innerHTML = loadingMarkup('du suivi technique');
       return;
     }
     const users = operations.users ?? {};
@@ -2018,58 +1927,51 @@
     const emails = operations.emails ?? {};
     const activity = operations.activity ?? {};
     const automation = operations.automation ?? {};
-    const config = readConfig();
-    const usageUrl = safeExternalUrl(config.usageUrl);
-    const homeSyncs = state.home?.data?.latestSyncs;
-    const currentSyncFailures = Array.isArray(homeSyncs)
-      ? currentSyncRows(homeSyncs).filter((run) => run.status === 'error' && !isAutomaticRetryPending(run)).length
-      : Number(automation.syncFailures24h) || 0;
     const emailCapacity = getEmailCapacity(state.emailQuota);
-    const emailDaily = emailCapacity.metrics.find((metric) => metric.key === 'email-day');
-    const emailMonthly = emailCapacity.metrics.find((metric) => metric.key === 'email-month');
-
     $('maintenance-view').innerHTML = `
       ${renderPlanCapacity(operations, state.emailQuota, true)}
-
-      <section class="maintenance-grid">
-        ${maintenanceCard('Comptes inscrits', users.total ?? 0, `${users.new7d ?? 0} nouveaux sur 7 jours`)}
-        ${maintenanceCard('Actifs estimés', users.signedIn30d ?? 0, 'Comptes connectés sur 30 jours')}
-        ${maintenanceCard('Taille de la base', formatBytes(database.bytes ?? 0), 'Stockage PostgreSQL')}
-        ${maintenanceCard('Tâches planifiées', `${automation.cronActive ?? 0}/${automation.cronTotal ?? 0}`, 'Actives / configurées')}
-        ${maintenanceCard('Connexions base', `${database.connections ?? 0}/${database.maxConnections ?? 0}`, `${database.connectionPercent ?? 0}% utilisé`)}
-        ${maintenanceCard('Quota e-mail du jour', `${emailDaily?.usedLabel ?? 0}/${emailDaily?.limitLabel ?? 100}`, formatPercent(emailDaily?.percent ?? 0))}
-        ${maintenanceCard('Quota e-mail du mois', `${emailMonthly?.usedLabel ?? 0}/${emailMonthly?.limitLabel ?? 3000}`, formatPercent(emailMonthly?.percent ?? 0))}
-        ${maintenanceCard('Échecs e-mail', emails.failed7d ?? 0, 'Échecs, rebonds ou plaintes')}
-      </section>
-
-      <section class="section-grid">
-        <article class="card">
-          <div class="card-head"><div><h3>Base et automatisations</h3><p>État technique utile, sans détails internes inutiles.</p></div></div>
-          <div class="source-list">
-            ${maintenanceRow('Tâches planifiées', Number(automation.cronActive) === Number(automation.cronTotal), `${automation.cronActive ?? 0} actives sur ${automation.cronTotal ?? 0}`)}
-            ${maintenanceRow('Sources en échec actuellement', currentSyncFailures === 0, `${currentSyncFailures} source(s) concernée(s)`)}
-            ${maintenanceRow('Connexions PostgreSQL', Number(database.connectionPercent) < 80, `${database.connectionPercent ?? 0}% de la capacité`)}
-          </div>
-          ${usageUrl ? `<p style="margin-top:14px"><a href="${escapeHtml(usageUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir l’utilisation Supabase</a></p>` : ''}
-        </article>
-
-        <article class="card">
-          <div class="card-head"><div><h3>E-mails techniques</h3><p>Quotas Resend, alertes et événements de livraison.</p></div></div>
-          <div class="source-list">
-            ${maintenanceRow('Quota quotidien', (emailDaily?.percent ?? 0) < QUOTA_WARNING_PERCENT, `${emailDaily?.usedLabel ?? 0}/${emailDaily?.limitLabel ?? 100} unité(s) · ${formatPercent(emailDaily?.percent ?? 0)}`)}
-            ${maintenanceRow('Quota mensuel', (emailMonthly?.percent ?? 0) < QUOTA_WARNING_PERCENT, `${emailMonthly?.usedLabel ?? 0}/${emailMonthly?.limitLabel ?? 3000} unité(s) · ${formatPercent(emailMonthly?.percent ?? 0)}`)}
-            ${maintenanceRow('Livraison sur 7 jours', Number(emails.failed7d) === 0, `${emails.delivered7d ?? 0} livrés · ${emails.failed7d ?? 0} échec(s)`)}
-            ${maintenanceRow('Dernier événement reçu', Boolean(emailCapacity.lastEventAt), emailCapacity.lastEventAt ? relativeDate(emailCapacity.lastEventAt) : 'Aucun événement')}
-            ${maintenanceRow('Suivi Resend', emailCapacity.trackingActive, emailCapacity.trackingActive ? `Actif depuis ${formatDate(emailCapacity.trackedSince)}` : 'Pas encore initialisé')}
-          </div>
-        </article>
-
-        <article class="card wide-card">
-          <div class="card-head"><div><h3>Diagnostic partageable</h3><p>Résumé sans clé, adresse utilisateur ni donnée sensible.</p></div><button class="ghost small" data-copy-diagnostic type="button">Copier</button></div>
+      <details class="card data-details">
+        <summary><div><strong>Automatisations et e-mails</strong><p>État des tâches et de la livraison des messages.</p></div></summary>
+        <div class="source-list data-details-body">
+          ${maintenanceRow('Tâches planifiées', Number(automation.cronActive) === Number(automation.cronTotal), `${automation.cronActive ?? '—'} actives sur ${automation.cronTotal ?? '—'}`)}
+          ${maintenanceRow('Connexions PostgreSQL', Number(database.connectionPercent) < 80, `${database.connections ?? '—'} sur ${database.maxConnections ?? '—'}`)}
+          ${maintenanceRow('Livraison sur 7 jours', Number(emails.failed7d) === 0, `${emails.delivered7d ?? '—'} livrés · ${emails.failed7d ?? '—'} échec(s)`)}
+          ${maintenanceRow('Dernier événement e-mail reçu', Boolean(emailCapacity.lastEventAt), emailCapacity.lastEventAt ? relativeDate(emailCapacity.lastEventAt) : 'Aucun événement connu')}
+          ${maintenanceRow('Suivi Resend', emailCapacity.trackingActive, emailCapacity.trackingActive ? `Actif depuis ${formatDate(emailCapacity.trackedSince)}` : 'Pas encore initialisé')}
+        </div>
+      </details>
+      <details class="card data-details">
+        <summary><div><strong>Diagnostic partageable</strong><p>Résumé technique sans clé ni adresse utilisateur.</p></div></summary>
+        <div class="data-details-body">
+          <button class="ghost small" data-copy-diagnostic type="button">Copier le diagnostic</button>
           <pre class="command">${escapeHtml(diagnosticText({ users, database, emails, emailQuota: state.emailQuota, activity, automation }))}</pre>
-        </article>
-      </section>
+        </div>
+      </details>
     `;
+  }
+
+  function quotaUsage(value) {
+    if (value == null || typeof value === 'boolean' || String(value).trim() === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  }
+
+  function quotaStatus(metrics) {
+    if (metrics.some(metric => metric.known && metric.percent >= 100)) return { tone: 'danger', label: 'Limite atteinte' };
+    if (metrics.some(metric => metric.tone === 'danger')) return { tone: 'danger', label: 'Limite proche' };
+    if (metrics.some(metric => metric.tone === 'warning')) return { tone: 'warning', label: 'À surveiller' };
+    if (metrics.some(metric => !metric.known)) return { tone: 'muted', label: 'À vérifier' };
+    return { tone: 'success', label: 'Marge disponible' };
+  }
+
+  function renderQuotaOverview() {
+    const metrics = [...getSupabaseCapacity(state.operations).metrics, ...getEmailCapacity(state.emailQuota).metrics];
+    const status = quotaStatus(metrics);
+    const labels = { mau: 'Comptes actifs · estim.', database: 'Base de données', 'email-day': 'E-mails suivis · jour', 'email-month': 'E-mails suivis · mois' };
+    return `<button type="button" class="quota-overview ${status.tone}" data-go-view="maintenance" aria-haspopup="dialog">
+      <span class="quota-overview-heading"><span><strong>Quotas et limites</strong><small>Supabase et Resend · 4 limites suivies</small></span><span class="pill ${status.tone}">${status.label}</span><span class="quota-overview-arrow" aria-hidden="true">→</span></span>
+      <span class="quota-overview-metrics">${metrics.map(metric => `<span class="quota-overview-metric ${metric.tone}"><span>${labels[metric.key]}</span><strong>${metric.known ? escapeHtml(formatPercent(metric.percent)) : 'Non disponible'}</strong><span class="quota-overview-track" aria-hidden="true"><i style="width:${metric.known ? Math.min(100, metric.percent) : 0}%"></i></span></span>`).join('')}</span>
+    </button>`;
   }
 
   function getSupabaseCapacity(operations = {}) {
@@ -2078,8 +1980,8 @@
     const database = operations?.database ?? {};
     const monthlyActiveUsersLimit = Number(config.limits.monthlyActiveUsers) || 0;
     const databaseBytesLimit = Number(config.limits.databaseBytes) || 0;
-    const monthlyActiveUsers = Number(users.signedIn30d) || 0;
-    const databaseBytes = Number(database.bytes) || 0;
+    const monthlyActiveUsers = quotaUsage(users.signedIn30d);
+    const databaseBytes = quotaUsage(database.bytes);
 
     return {
       plan: config.plan,
@@ -2092,9 +1994,9 @@
           shortLabel: 'MAU',
           used: monthlyActiveUsers,
           limit: monthlyActiveUsersLimit,
-          usedLabel: formatNumber(monthlyActiveUsers),
+          usedLabel: monthlyActiveUsers === null ? '—' : formatNumber(monthlyActiveUsers),
           limitLabel: formatNumber(monthlyActiveUsersLimit),
-          remainingLabel: `${formatNumber(Math.max(0, monthlyActiveUsersLimit - monthlyActiveUsers))} disponibles`,
+          remainingLabel: monthlyActiveUsers === null ? 'Utilisation non disponible' : `${formatNumber(Math.max(0, monthlyActiveUsersLimit - monthlyActiveUsers))} disponibles`,
           detail: 'Estimation à partir des connexions des 30 derniers jours',
         }),
         quotaMetric({
@@ -2103,9 +2005,9 @@
           shortLabel: 'Base',
           used: databaseBytes,
           limit: databaseBytesLimit,
-          usedLabel: formatBytes(databaseBytes),
+          usedLabel: databaseBytes === null ? '—' : formatBytes(databaseBytes),
           limitLabel: formatBytes(databaseBytesLimit),
-          remainingLabel: `${formatBytes(Math.max(0, databaseBytesLimit - databaseBytes))} disponibles`,
+          remainingLabel: databaseBytes === null ? 'Utilisation non disponible' : `${formatBytes(Math.max(0, databaseBytesLimit - databaseBytes))} disponibles`,
           detail: 'Taille PostgreSQL mesurée en direct',
         }),
       ],
@@ -2116,8 +2018,8 @@
     const config = readConfig();
     const dailyLimit = Number(config.limits.emailDailyUnits) || 0;
     const monthlyLimit = Number(config.limits.emailMonthlyUnits) || 0;
-    const usedToday = Number(quota?.usedToday) || 0;
-    const usedMonth = Number(quota?.usedMonth) || 0;
+    const usedToday = quota?.trackedSince ? quotaUsage(quota.usedToday) : null;
+    const usedMonth = quota?.trackedSince ? quotaUsage(quota.usedMonth) : null;
 
     return {
       plan: config.emailPlan,
@@ -2132,9 +2034,9 @@
           shortLabel: 'Jour',
           used: usedToday,
           limit: dailyLimit,
-          usedLabel: formatNumber(usedToday),
+          usedLabel: usedToday === null ? '—' : formatNumber(usedToday),
           limitLabel: formatNumber(dailyLimit),
-          remainingLabel: `${formatNumber(Math.max(0, dailyLimit - usedToday))} disponibles`,
+          remainingLabel: usedToday === null ? 'Suivi non disponible' : `${formatNumber(Math.max(0, dailyLimit - usedToday))} disponibles`,
           detail: quota?.nextDayAt ? `Remise à zéro ${relativeDate(quota.nextDayAt)}` : 'Quota quotidien Resend',
         }),
         quotaMetric({
@@ -2143,9 +2045,9 @@
           shortLabel: 'Mois',
           used: usedMonth,
           limit: monthlyLimit,
-          usedLabel: formatNumber(usedMonth),
+          usedLabel: usedMonth === null ? '—' : formatNumber(usedMonth),
           limitLabel: formatNumber(monthlyLimit),
-          remainingLabel: `${formatNumber(Math.max(0, monthlyLimit - usedMonth))} disponibles`,
+          remainingLabel: usedMonth === null ? 'Suivi non disponible' : `${formatNumber(Math.max(0, monthlyLimit - usedMonth))} disponibles`,
           detail: quota?.nextMonthAt ? `Remise à zéro ${formatDate(quota.nextMonthAt)}` : 'Quota mensuel Resend',
         }),
       ],
@@ -2153,11 +2055,13 @@
   }
 
   function quotaMetric(metric) {
-    const percent = metric.limit > 0 ? (metric.used / metric.limit) * 100 : 0;
+    const known = Number.isFinite(metric.used) && metric.used >= 0 && Number.isFinite(metric.limit) && metric.limit > 0;
+    const percent = known ? (metric.used / metric.limit) * 100 : null;
     return {
       ...metric,
+      known,
       percent,
-      tone: percent >= QUOTA_DANGER_PERCENT
+      tone: !known ? 'muted' : percent >= QUOTA_DANGER_PERCENT
         ? 'danger'
         : percent >= QUOTA_WARNING_PERCENT ? 'warning' : 'success',
     };
@@ -2168,15 +2072,17 @@
     const emailCapacity = getEmailCapacity(emailQuota);
     const supabasePlanName = supabaseCapacity.plan === 'free' ? 'gratuit' : supabaseCapacity.plan;
     const emailPlanName = emailCapacity.plan === 'free' ? 'gratuit' : emailCapacity.plan;
+    const status = quotaStatus([...supabaseCapacity.metrics, ...emailCapacity.metrics]);
     return `
       <section class="capacity-panel">
         <div class="capacity-head">
           <div>
             <p class="eyebrow">Capacité et quotas</p>
-            <h3>Plans gratuits sous contrôle</h3>
+            <h3>Quotas et limites</h3>
             <p>Supabase ${escapeHtml(supabasePlanName)} · Resend ${escapeHtml(emailPlanName)} · ${formatNumber(supabaseCapacity.totalUsers)} compte${supabaseCapacity.totalUsers > 1 ? 's' : ''}.</p>
           </div>
           <div class="capacity-links">
+            <span class="pill ${status.tone}">${status.label}</span>
             ${supabaseCapacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(supabaseCapacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Supabase</a>` : ''}
             ${emailCapacity.usageUrl ? `<a class="ghost capacity-link" href="${escapeHtml(emailCapacity.usageUrl)}" target="_blank" rel="noopener noreferrer">Resend</a>` : ''}
           </div>
@@ -2198,10 +2104,10 @@
       <article class="quota-item ${escapeHtml(metric.tone)}">
         <div class="quota-top">
           <div><strong>${escapeHtml(metric.label)}</strong><p>${escapeHtml(metric.detail)}</p></div>
-          <span class="pill ${escapeHtml(metric.tone)}">${escapeHtml(formatPercent(metric.percent))}</span>
+          <span class="pill ${escapeHtml(metric.tone)}">${metric.known ? escapeHtml(formatPercent(metric.percent)) : 'Non disponible'}</span>
         </div>
         <div class="quota-values"><strong>${escapeHtml(metric.usedLabel)}</strong><span>sur ${escapeHtml(metric.limitLabel)}</span></div>
-        <div class="quota-track" role="progressbar" aria-label="${escapeHtml(metric.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(metric.percent))}"><i style="width:${visualPercent}%"></i></div>
+        ${metric.known ? `<div class="quota-track" role="progressbar" aria-label="${escapeHtml(metric.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, Math.round(metric.percent))}"><i style="width:${visualPercent}%"></i></div>` : '<p class="hint">Mesure ou limite indisponible.</p>'}
         <small>${escapeHtml(metric.remainingLabel)}</small>
       </article>
     `;
@@ -2277,7 +2183,7 @@
         const live = $('live-state');
         const connected = status === 'SUBSCRIBED';
         live.classList.toggle('offline', !connected);
-        live.lastChild.textContent = connected ? 'Direct' : 'Reconnexion';
+        live.lastChild.textContent = connected ? 'Suivi connecté' : 'Reconnexion';
       });
   }
 
@@ -2315,6 +2221,7 @@
   }
 
   function invalidate(...views) {
+    if (views.includes('data')) state.loaded.delete('links');
     views.forEach((view) => state.loaded.delete(view));
   }
 
@@ -2487,7 +2394,13 @@
     return labels[status] || status || 'Inconnu';
   }
 
+  function isStaleRelease(release) {
+    const updated = dateValue(release?.updated_at || release?.updatedAt);
+    return ACTIVE_RELEASE_STATUSES.has(release?.status) && updated > 0 && Date.now() - updated > 7 * 86400000;
+  }
+
   function releaseStatusText(release) {
+    if (isStaleRelease(release)) return 'Statut ancien à vérifier';
     if (release?.kind === 'native_build' && release?.status === 'succeeded') return 'Build prêt';
     if (release?.kind === 'store_submission' && release?.status === 'succeeded') return 'Envoyée';
     return releaseStatusLabel(release?.status);

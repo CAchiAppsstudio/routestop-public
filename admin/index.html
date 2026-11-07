@@ -11,7 +11,7 @@
     />
     <title>RouteStop Admin</title>
     <link rel="icon" type="image/png" href="../assets/icon.png" />
-    <link rel="stylesheet" href="./styles-v2.css?v=20261107-sync" />
+    <link rel="stylesheet" href="./styles-v2.css?v=20261107-quota-expand" />
     <link rel="stylesheet" href="./area-review.css?v=20261027-aires" />
   </head>
   <body>
@@ -87,35 +87,37 @@
       </section>
 
       <section id="app-shell" class="admin-shell hidden wide">
-        <aside class="sidebar">
-          <nav aria-label="Administration">
-            <button class="nav active" data-view="home" type="button"><span>⌂</span>Aujourd’hui</button>
-            <button class="nav" data-view="actions" type="button"><span>✓</span>À traiter <em id="pending-nav-count" class="nav-count hidden">0</em></button>
-            <button class="nav" data-view="data" type="button"><span>↻</span>Données</button>
-            <button class="nav" data-view="areas" type="button"><span>◇</span>Aires à vérifier</button>
-            <button class="nav" data-view="releases" type="button"><span>↑</span>Versions</button>
-            <button class="nav" data-view="stats" type="button"><span>↗</span>Statistiques</button>
-          </nav>
-          <div class="sidebar-bottom">
-            <button class="nav secondary" data-view="maintenance" type="button"><span>⚙</span>Maintenance</button>
-            <button id="refresh-btn" class="ghost refresh" type="button">Actualiser</button>
-          </div>
-        </aside>
-
-        <section class="workspace">
-          <div class="workspace-head">
-            <div>
-              <p class="eyebrow" id="view-eyebrow">Pilotage</p>
-              <h2 id="view-title">Aujourd’hui</h2>
-            </div>
-            <div class="workspace-status">
-              <span id="live-state" class="live-state"><i></i>Direct</span>
-              <p id="admin-feedback" class="hint" role="status"></p>
+        <section class="workspace dashboard-workspace">
+          <div class="dashboard-heading">
+            <div><h2>Tableau de bord</h2><p id="admin-feedback" class="hint" role="status"></p></div>
+            <div class="dashboard-tools">
+              <button id="refresh-btn" class="ghost" type="button">↻ Recharger</button>
+              <button id="tools-btn" class="ghost" data-go-view="maintenance" type="button">Outils <span id="tools-alert"></span></button>
             </div>
           </div>
-
+          <span id="live-state" class="hidden"><i></i>Suivi connecté</span>
           <section id="home-view" class="view" aria-live="polite"></section>
 
+          <dialog id="detail-drawer" class="detail-drawer" aria-labelledby="view-title">
+            <header class="drawer-heading">
+              <h2 id="view-title">Détail</h2>
+              <div class="drawer-actions">
+                <button id="expand-drawer" class="ghost" type="button" aria-controls="detail-drawer" aria-pressed="false">Agrandir ⛶</button>
+                <button id="close-drawer" class="ghost" type="button" autofocus>Fermer ✕</button>
+              </div>
+            </header>
+            <p id="detail-feedback" class="drawer-feedback hint" role="status"></p>
+            <nav id="section-nav" aria-label="Rubriques secondaires">
+              <div class="section-tabs hidden" data-group="review">
+                <button data-go-view="areas" type="button">Accès à vérifier</button>
+                <button data-go-view="links" type="button">Prix à associer</button>
+              </div>
+              <div class="section-tabs hidden" data-group="tools">
+                <button data-go-view="maintenance" type="button">Quotas et diagnostic</button>
+                <button data-go-view="releases" type="button">Livraisons</button>
+              </div>
+            </nav>
+            <div class="drawer-body">
           <section id="actions-view" class="view hidden">
             <div class="toolbar">
               <div class="segmented" id="status-tabs">
@@ -124,16 +126,20 @@
                 <button data-status="rejected" type="button">Rejetés</button>
                 <button data-status="all" type="button">Tous</button>
               </div>
-              <input id="search" class="search" type="search" placeholder="Aire, enseigne, détail..." />
+              <input id="search" class="search" type="search" aria-label="Rechercher un signalement" placeholder="Aire, enseigne, détail..." />
             </div>
             <div id="reports-list" class="stack"></div>
           </section>
 
           <section id="data-view" class="view hidden"></section>
+          <section id="links-view" class="view hidden"></section>
           <section id="areas-view" class="view hidden"></section>
           <section id="releases-view" class="view hidden"></section>
           <section id="stats-view" class="view hidden"></section>
           <section id="maintenance-view" class="view hidden"></section>
+
+            </div>
+          </dialog>
         </section>
       </section>
     </main>
@@ -141,7 +147,7 @@
     <script src="./config.js"></script>
     <script src="./vendor/supabase-js-2.105.1.js"></script>
     <script src="./area-review-data.js?v=20261027-aires"></script>
-    <script src="./area-review.js?v=20261027-aires"></script>
-    <script src="./app-v2.js?v=20261107-sync"></script>
+    <script src="./area-review.js?v=20261107-dashboard-actions"></script>
+    <script src="./app-v2.js?v=20261107-quota-expand"></script>
   </body>
 </html>
