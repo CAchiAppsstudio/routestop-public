@@ -1,0 +1,60 @@
+name: OSM Centre daily extract
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 1 * * *'
+  push:
+    branches: [main]
+    paths: ['scripts/osm-centre-extract.py', '.github/workflows/osm-centre.yml']
+permissions:
+  contents: write
+concurrency:
+  group: osm-centre
+  cancel-in-progress: false
+jobs:
+  extract:
+    if: github.repository == 'CAchiAppsstudio/routestop-public'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check resources and install parser
+        run: |
+          test "$(df --output=avail -B1 "$RUNNER_TEMP" | tail -1)" -gt 8000000000
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends osmium-tool
+          python3 -m venv "$RUNNER_TEMP/osm-venv"
+          "$RUNNER_TEMP/osm-venv/bin/pip" install --no-cache-dir osmium==4.3.2
+      - name: Download public OSM data and extract Centre
+        run: |
+          mkdir -p "$RUNNER_TEMP/osm-centre"
+          cd "$RUNNER_TEMP/osm-centre"
+          curl --fail --location --retry 2 --retry-delay 30 --connect-timeout 20 --max-time 600 \
+            --output france.osm.pbf https://download.geofabrik.de/europe/france-latest.osm.pbf
+          DATA_AS_OF="$(osmium fileinfo -g header.option.osmosis_replication_timestamp france.osm.pbf)"
+          test -n "$DATA_AS_OF"
+          echo "DATA_AS_OF=$DATA_AS_OF" >> "$GITHUB_ENV"
+          osmium extract --bbox=0.97,44.37,4.23,47.53 --strategy=smart france.osm.pbf -o centre.osm.pbf
+          rm france.osm.pbf
+          osmium tags-filter centre.osm.pbf nwr/highway=services w/highway=motorway \
+            nwr/amenity=fuel,fast_food,restaurant,cafe,food_court,bar,ice_cream,charging_station nwr/shop \
+            -o selected.osm.pbf
+          rm centre.osm.pbf
+      - name: Validate and produce the small public snapshot
+        run: |
+          "$RUNNER_TEMP/osm-venv/bin/python" scripts/osm-centre-extract.py \
+            "$RUNNER_TEMP/osm-centre/selected.osm.pbf" data/osm/centre.json --data-as-of "$DATA_AS_OF"
+      - name: Save only validated public OSM data
+        run: |
+          git config user.name 'RouteStop OSM refresh'
+          git config user.email 'actions@users.noreply.github.com'
+          git add data/osm/centre.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'data(osm): refresh Centre from Geofabrik'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - name: Remove temporary extracts
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/osm-centre" "$RUNNER_TEMP/osm-venv"
