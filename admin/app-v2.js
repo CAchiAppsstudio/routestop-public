@@ -5,26 +5,33 @@
     'requested', 'checking', 'publishing', 'running', 'waiting_review', 'in_review',
   ]);
   const OSM_REGIONS = [
-    'north_1', 'north_2', 'north_3a', 'north_3b', 'north_4', 'north_5',
-    'center_1', 'center_2', 'center_3', 'center_4',
+    'north_1', 'north_2a', 'north_2b', 'north_3a1', 'north_3a2', 'north_3b', 'north_4', 'north_5',
+    'center_1', 'center_2', 'center_3a', 'center_3b', 'center_4',
     'south_1', 'south_2', 'south_3', 'south_4',
   ];
   const REGION_LABELS = {
     north_1: 'Bretagne ouest',
     north_2: 'Bretagne est et Normandie',
+    north_2a: 'Bretagne est et Normandie — Ouest',
+    north_2b: 'Bretagne est et Normandie — Est',
     north_3a: 'Région parisienne ouest',
+    north_3a1: 'Région parisienne ouest — Ouest',
+    north_3a2: 'Région parisienne ouest — Est',
     north_3b: 'Région parisienne est et Champagne',
     north_4: 'Nord-Est',
     north_5: 'Alsace',
     center_1: 'Centre-Ouest',
     center_2: 'Centre',
     center_3: 'Centre-Est',
+    center_3a: 'Centre-Est — Ouest',
+    center_3b: 'Centre-Est — Est',
     center_4: 'Alpes du Nord',
     south_1: 'Sud-Ouest',
     south_2: 'Languedoc',
     south_3: 'Sud-Est',
     south_4: 'Corse et frontière italienne',
   };
+  const APPLICABLE_OSM_REGIONS = OSM_REGIONS.filter(region => region !== 'north_1');
   const REPORT_TYPES = {
     brand_closed: 'Enseigne fermée',
     brand_missing: 'Enseigne manquante',
@@ -78,6 +85,8 @@
     analyticsDays: 30,
     operations: null,
     emailQuota: null,
+    syncStatus: null,
+    storeDownloads: null,
     bulkSync: {
       active: false,
       completed: 0,
@@ -260,6 +269,7 @@
     });
 
     $('home-view').addEventListener('click', handleNavigationAction);
+    $('home-view').addEventListener('submit', saveStoreDownloads);
     $('actions-view').addEventListener('click', handleReportAction);
     $('data-view').addEventListener('click', handleDataAction);
     $('data-view').addEventListener('input', handleDataInput);
@@ -278,6 +288,8 @@
     state.analytics = null;
     state.operations = null;
     state.emailQuota = null;
+    state.syncStatus = null;
+    state.storeDownloads = null;
     state.bulkSync = { active: false, completed: 0, total: 0, region: null };
     fuelLinkFilter = 'all';
     fuelLinkSearch = '';
@@ -383,15 +395,20 @@
     showFeedback('Vérification…');
 
     try {
+      if (view === 'home' || view === 'data') {
+        state.syncStatus = await queryOptional(client.rpc('admin_sync_status_v1'), null);
+      }
       if (view === 'home') {
-        const [home, operations, emailQuota] = await Promise.all([
+        const [home, operations, emailQuota, downloads] = await Promise.all([
           query(client.rpc('admin_home_v2')),
           query(client.rpc('admin_operations_v1')),
           query(client.rpc('admin_email_quota_v1')),
+          queryOptional(client.rpc('admin_store_downloads_v1'), null),
         ]);
         state.home = home;
         state.operations = operations;
         state.emailQuota = emailQuota;
+        state.storeDownloads = downloads;
       } else if (view === 'actions') {
         state.reports = await query(client
           .from('station_reports')
@@ -476,7 +493,7 @@
     };
     const latestSyncs = currentSyncRows(data.latestSyncs);
     const osmSyncs = latestSyncs.filter((item) => item.source === 'service_areas_osm');
-    const osmSuccesses = osmSyncs.filter((item) => item.status === 'success').length;
+    const osmSuccesses = osmSyncs.filter(isSyncDataFresh).length;
     const dataActions = latestSyncs.filter(isActionableDataRun);
     const syncErrors = latestSyncs.filter((item) => item.status === 'error' && !isAutomaticRetryPending(item));
     const syncWarnings = latestSyncs.filter(isAutomaticRetryPending);
@@ -489,7 +506,8 @@
     const emailQuotaWarning = emailCapacity.metrics.some((metric) => metric.percent >= QUOTA_WARNING_PERCENT);
     const danger = syncErrors.length > 0 || releaseFailed || emailFailures > 0 || emailQuotaCritical;
     const warning = !danger && (
-      syncPartials.length > 0
+      osmSuccesses < APPLICABLE_OSM_REGIONS.length
+      || syncPartials.length > 0
       || syncWarnings.length > 0
       || Number(reportData.pending) > 0
       || Number(releaseData.active) > 0
@@ -525,9 +543,10 @@
         ${kpiCard('À traiter', pendingCount, pendingCount ? 'Action requise' : 'File vide')}
         ${kpiCard('Recherches sur 7 jours', activity.routeSearches7d ?? 0, `${activity.routeSearches24h ?? 0} sur 24 h`)}
         ${kpiCard('Comptes inscrits', activity.usersTotal ?? 0, `${activity.activeUsers7d ?? 0} actifs sur 7 jours`)}
-        ${kpiCard('Zones de services', `${osmSuccesses}/${OSM_REGIONS.length}`, dataActions.length ? `${dataActions.length} action${dataActions.length > 1 ? 's' : ''} requise${dataActions.length > 1 ? 's' : ''}` : 'Aucune intervention')}
+        ${kpiCard('Secteurs actualisés sous 48 h', `${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length}`, '17 secteurs suivis · 1 non applicable')}
       </section>
 
+      ${renderStoreDownloads()}
       ${renderPlanCapacity(capacityOperations, state.emailQuota)}
 
       <section class="section-grid">
@@ -561,6 +580,74 @@
 
   function kpiCard(label, value, detail) {
     return `<article class="kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatNumberOrText(value))}</strong><small>${escapeHtml(detail)}</small></article>`;
+  }
+
+  function storeDownloadSummary(payload) {
+    const rows = Array.isArray(payload?.platforms) ? payload.platforms : [];
+    const valid = platform => rows.find(row => row.platform === platform && row.firstDownloads !== null
+      && Number.isSafeInteger(Number(row.firstDownloads)) && Number(row.firstDownloads) >= 0
+      && /^\d{4}-\d{2}-\d{2}$/.test(row.periodStart) && /^\d{4}-\d{2}-\d{2}$/.test(row.asOf));
+    const ios = valid('ios');
+    const android = valid('android');
+    const samePeriod = ios && android && ios.periodStart === android.periodStart && ios.asOf === android.asOf;
+    const total = samePeriod ? Number(ios.firstDownloads) + Number(android.firstDownloads) : null;
+    return { ios, android, total: Number.isSafeInteger(total) ? total : null };
+  }
+
+  function renderStoreDownloads() {
+    const summary = storeDownloadSummary(state.storeDownloads);
+    const details = row => row ? `${formatDateOnly(row.periodStart)} → ${formatDateOnly(row.asOf)} · relevé manuel`
+      : 'Rapport du store à renseigner';
+    return `<section class="card downloads-panel">
+      <div class="card-head"><div><p class="eyebrow">Diffusion de RouteStop</p><h3>Premiers téléchargements</h3>
+      <p>Chiffres des stores, distincts des comptes inscrits. Aucun suivi supplémentaire dans l’application.</p></div><span class="pill muted">Relevés manuels</span></div>
+      <div class="downloads-grid">
+        ${kpiCard('Total iOS + Android', summary.total ?? '—', summary.total === null ? 'Deux rapports sur la même période requis' : details(summary.ios))}
+        ${kpiCard('iPhone · App Store', summary.ios?.firstDownloads ?? '—', details(summary.ios))}
+        ${kpiCard('Android · Google Play', summary.android?.firstDownloads ?? '—', details(summary.android))}
+      </div>
+      <p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques et ne s’actualise pas automatiquement.</p>
+      <details><summary>Renseigner un relevé officiel</summary>
+        <p class="hint">Apple : « Premiers téléchargements » ou « Unités » dans Tendances, filtrées sur RouteStop. Google : « Acquisition d’utilisateurs » → « Nouveaux utilisateurs ». Choisir tous les pays et la même période. Pour un total depuis le lancement, prendre une date de début antérieure au lancement des deux versions. Ne pas utiliser « Audience ayant installé l’application ». Chaque store conserve son fuseau de reporting.</p>
+        <div class="store-links"><a class="ghost" href="https://appstoreconnect.apple.com/trends" target="_blank" rel="noopener noreferrer">Ouvrir App Store Connect</a>
+        <a class="ghost" href="https://play.google.com/console/u/0/developers/5130624800963001569/app/4974573420398337108/statistics" target="_blank" rel="noopener noreferrer">Ouvrir Google Play</a></div>
+        <form data-store-downloads class="store-download-form">
+          <label>Plateforme<select name="platform" required><option value="ios">iPhone</option><option value="android">Android</option></select></label>
+          <label>Du<input name="periodStart" type="date" required></label>
+          <label>Au (journée complète)<input name="asOf" type="date" required></label>
+          <label>Premiers téléchargements<input name="count" type="number" min="0" max="9007199254740991" step="1" required></label>
+          <label class="checkline"><input name="verified" type="checkbox" required>Chiffre vérifié dans le store, tous pays, hors mises à jour et réinstallations.</label>
+          <button type="submit" ${state.storeDownloads ? '' : 'disabled'}>Enregistrer le relevé</button>
+        </form>
+      </details>
+    </section>`;
+  }
+
+  function formatDateOnly(value) {
+    return new Date(`${value}T12:00:00Z`).toLocaleDateString('fr-FR');
+  }
+
+  async function saveStoreDownloads(event) {
+    const form = event.target.closest('[data-store-downloads]');
+    if (!form) return;
+    event.preventDefault();
+    const fields = new FormData(form);
+    const count = Number(fields.get('count'));
+    if (!Number.isSafeInteger(count) || count < 0 || !fields.get('verified')) return;
+    if (!window.confirm(`Enregistrer ${count} premiers téléchargements pour ${fields.get('platform')} du ${fields.get('periodStart')} au ${fields.get('asOf')} ?`)) return;
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await query(client.rpc('admin_record_store_downloads_v1', {
+        p_platform: fields.get('platform'), p_period_start: fields.get('periodStart'),
+        p_as_of: fields.get('asOf'), p_first_downloads: count,
+      }));
+      await loadView('home', true);
+      showFeedback('Relevé enregistré. La date de couverture reste affichée.');
+    } catch {
+      showFeedback('Relevé non enregistré. Vérifie les dates (pas de journée en cours) et ta connexion.');
+      button.disabled = false;
+    }
   }
 
   function buildHomeTasks(payload) {
@@ -721,23 +808,23 @@
     return `
       <div class="source-row">
         <span class="row-icon ${tone}">${run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
-        <div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)} · ${run ? relativeDate(run.finishedAt || run.startedAt || run.requestedAt) : 'jamais vérifiée'}</p></div>
+        <div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)} · ${escapeHtml(syncDatesLabel(run))}</p></div>
         <span class="pill ${tone}">${escapeHtml(syncRunStatusLabel(run))}</span>
       </div>
     `;
   }
 
   function homeOsmRow(runs) {
-    const successes = runs.filter((run) => run.status === 'success').length;
+    const successes = runs.filter(isSyncDataFresh).length;
     const errors = runs.filter((run) => run.status === 'error' && !isAutomaticRetryPending(run)).length;
     const transientErrors = runs.filter(isAutomaticRetryPending).length;
     const partials = runs.filter((run) => run.status === 'partial').length;
-    const tone = errors ? 'danger' : transientErrors || partials || successes < OSM_REGIONS.length ? 'warning' : 'success';
+    const tone = errors ? 'danger' : transientErrors || partials || successes < APPLICABLE_OSM_REGIONS.length ? 'warning' : 'success';
     const latest = [...runs].sort((a, b) => dateValue(b.finishedAt || b.startedAt) - dateValue(a.finishedAt || a.startedAt))[0];
     return `
       <div class="source-row">
         <span class="row-icon ${tone}">${tone === 'success' ? '✓' : '!'}</span>
-        <div><strong>Restaurants et services</strong><p>${successes}/${OSM_REGIONS.length} zones vérifiées · ${latest ? relativeDate(latest.finishedAt || latest.startedAt) : 'jamais vérifiée'}</p></div>
+        <div><strong>Restaurants et services</strong><p>${successes}/${APPLICABLE_OSM_REGIONS.length} secteurs actualisés sous 48 h · 1 non applicable</p></div>
         <span class="pill ${tone}">${errors ? `${errors} échec${errors > 1 ? 's' : ''}` : transientErrors ? `${transientErrors} à relancer` : tone === 'success' ? 'À jour' : 'À suivre'}</span>
       </div>
     `;
@@ -932,10 +1019,10 @@
     const fuel = latest.find((run) => run.source === 'fuel_prices_gov');
     const official = latest.find((run) => run.source === 'service_areas_operator');
     const osmRuns = latest.filter((run) => run.source === 'service_areas_osm');
-    const activeRuns = recent.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
+    const activeRuns = latest.filter((run) => ACTIVE_SYNC_STATUSES.has(run.status));
     const actionableRuns = latest.filter((run) => isActionableDataRun(run) && !isMatchingSyncActive(run, activeRuns));
     const automaticRetries = latest.filter((run) => isAutomaticRetryPending(run) && !isMatchingSyncActive(run, activeRuns));
-    const osmSuccesses = osmRuns.filter((run) => run.status === 'success').length;
+    const osmSuccesses = osmRuns.filter(isSyncDataFresh).length;
     const fuelActive = activeRuns.some((run) => run.source === 'fuel_prices_gov');
     const officialActive = activeRuns.some((run) => run.source === 'service_areas_operator');
     const osmActive = activeRuns.some((run) => run.source === 'service_areas_osm');
@@ -943,7 +1030,7 @@
     $('data-view').innerHTML = `
       <section class="kpi-grid">
         ${kpiCard('Actions requises', actionableRuns.length, actionableRuns.length ? 'À relancer ci-dessous' : 'Aucune intervention')}
-        ${kpiCard('Zones de services à jour', `${osmSuccesses}/${OSM_REGIONS.length}`, automaticRetries.length ? `${automaticRetries.length} relance${automaticRetries.length > 1 ? 's' : ''} automatique${automaticRetries.length > 1 ? 's' : ''} prévue${automaticRetries.length > 1 ? 's' : ''}` : 'Restaurants et services')}
+        ${kpiCard('Secteurs actualisés sous 48 h', `${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length}`, '17 secteurs suivis · 1 non applicable')}
         ${kpiCard(
           'Stations avec prix disponible',
           counts.fuelPrices ?? 0,
@@ -979,8 +1066,8 @@
       <section class="section-grid">
         <details class="card wide-card data-details" id="osm-zone-status">
           <summary>
-            <div><strong>État des 14 zones</strong><p>Consulte ou actualise directement une zone précise.</p></div>
-            <span class="pill ${actionableRuns.some((run) => run.source === 'service_areas_osm') ? 'danger' : automaticRetries.length ? 'warning' : 'success'}">${osmSuccesses}/${OSM_REGIONS.length} à jour</span>
+            <div><strong>État des ${OSM_REGIONS.length} secteurs</strong><p>Dernière réussite et dernière tentative sont séparées. Les données précédentes restent disponibles.</p></div>
+            <span class="pill ${osmSuccesses < APPLICABLE_OSM_REGIONS.length ? 'warning' : 'success'}">${osmSuccesses}/${APPLICABLE_OSM_REGIONS.length} sous 48 h</span>
           </summary>
           <div class="zone-list data-details-body">
             ${OSM_REGIONS.map((region) => renderOsmZoneRow(region, osmRuns, activeRuns)).join('')}
@@ -1311,10 +1398,10 @@
     return `
       <div class="data-action-row">
         <span class="row-icon ${tone}">${automatic ? '↻' : '!'}</span>
-        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(message)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p></div>
+        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(message)}</p><p>${escapeHtml(syncDatesLabel(run))}${run.checkpoint ? ' · Progression conservée pour la reprise.' : ''}</p></div>
         <span class="pill ${tone}">${escapeHtml(status)}</span>
         ${automatic ? '<span class="data-action-wait">Automatique</span>' : `
-          <button class="ghost small" data-sync-target="${escapeHtml(target)}" ${run.region ? `data-sync-region="${escapeHtml(run.region)}"` : ''} type="button" ${state.bulkSync.active ? 'disabled' : ''}>Relancer</button>
+          <button class="ghost small" data-sync-target="${escapeHtml(target)}" ${run.region ? `data-sync-region="${escapeHtml(run.region)}"` : ''} type="button" ${state.bulkSync.active ? 'disabled' : ''}>${run.checkpoint ? 'Reprendre' : 'Relancer'}</button>
         `}
       </div>
     `;
@@ -1328,7 +1415,7 @@
           <span class="pill ${tone}">${escapeHtml(active ? 'En cours' : syncRunStatusLabel(run))}</span>
           <h3>${escapeHtml(title)}</h3>
           <p>${escapeHtml(description)}</p>
-          <p style="margin-top:8px">${run ? `Dernier résultat ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}` : 'Aucun résultat enregistré.'}</p>
+          <p style="margin-top:8px">${escapeHtml(syncDatesLabel(run))}</p>
           ${run?.message ? `<p style="margin-top:6px;color:var(--red)">${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
         </div>
         <div class="source-actions">
@@ -1339,21 +1426,21 @@
   }
 
   function renderOsmSyncCard(runs, active, actionableRuns) {
-    const successes = runs.filter((run) => run.status === 'success').length;
+    const successes = runs.filter(isSyncDataFresh).length;
     const actions = actionableRuns.filter((run) => run.source === 'service_areas_osm').length;
     const automaticRetries = runs.filter(isAutomaticRetryPending).length;
-    const tone = actions ? 'danger' : automaticRetries || successes < OSM_REGIONS.length ? 'warning' : 'success';
+    const tone = actions ? 'danger' : automaticRetries || successes < APPLICABLE_OSM_REGIONS.length ? 'warning' : 'success';
     return `
       <article class="source-card">
         <div>
-          <span class="pill ${tone}">${successes}/${OSM_REGIONS.length} zones à jour</span>
+          <span class="pill ${tone}">${successes}/${APPLICABLE_OSM_REGIONS.length} secteurs actualisés sous 48 h</span>
           <h3>Restaurants et services</h3>
-          <p>Données OpenStreetMap vérifiées par zone.</p>
+          <p>17 secteurs techniques, dont Bretagne ouest non applicable au filtre autoroutier. Une synchronisation ne certifie pas chaque commerce sur place.</p>
           ${actions ? `<p style="margin-top:8px;color:var(--red)">${actions} zone${actions > 1 ? 's nécessitent' : ' nécessite'} une relance.</p>` : ''}
           ${automaticRetries ? `<p style="margin-top:8px">${automaticRetries} zone${automaticRetries > 1 ? 's seront relancées' : ' sera relancée'} automatiquement.</p>` : ''}
         </div>
         <div class="source-actions">
-          <button class="ghost" data-show-zones type="button">Voir les 14 zones</button>
+          <button class="ghost" data-show-zones type="button">Voir les ${OSM_REGIONS.length} lots</button>
           ${active ? '<span class="pill info">Mise à jour en cours</span>' : ''}
         </div>
       </article>
@@ -1365,15 +1452,15 @@
     const active = activeRuns.some((item) => item.source === 'service_areas_osm' && item.region === region);
     const tone = active ? 'info' : syncRunTone(run);
     const status = active ? 'En cours' : syncRunStatusLabel(run);
-    const detail = run
-      ? `${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}${run.message ? ` · ${escapeHtml(friendlySyncError(run.message))}` : ''}`
-      : 'Aucun résultat enregistré.';
+    const detail = isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.'
+      : `${escapeHtml(syncDatesLabel(run))}${run?.message ? `<br>${escapeHtml(friendlySyncError(run.message))}` : ''}`;
+    const progress = run?.checkpoint;
     return `
       <div class="zone-row">
         <span class="row-icon ${tone}">${active ? '↻' : run?.status === 'success' ? '✓' : run ? '!' : '?'}</span>
-        <div><strong>${escapeHtml(REGION_LABELS[region])}</strong><p>${detail}</p></div>
+        <div><strong>${escapeHtml(REGION_LABELS[region])}</strong><p>${detail}</p>${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/4 portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}</div>
         <span class="pill ${tone}">${escapeHtml(status)}</span>
-        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active ? 'disabled' : ''}>Actualiser</button>
+        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) ? 'disabled' : ''}>${progress ? 'Reprendre' : 'Actualiser'}</button>
       </div>
     `;
   }
@@ -1391,7 +1478,7 @@
       <div class="history-row">
         <span class="row-icon ${tone}">${run.status === 'success' ? '✓' : ACTIVE_SYNC_STATUSES.has(run.status) ? '↻' : '!'}</span>
         <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(trigger)} · ${escapeHtml(detail)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p></div>
-        <span class="pill ${tone}">${escapeHtml(syncRunStatusLabel(run))}</span>
+        <span class="pill ${tone}">${escapeHtml(run.status === 'success' ? 'Terminée' : syncRunStatusLabel(run))}</span>
       </div>
     `;
   }
@@ -1561,6 +1648,12 @@
   }
 
   function requestSync(target, region = null) {
+    if (target === 'osm_region') {
+      return query(client.rpc('admin_trigger_osm_region_v2', { p_region: region })).then(result => {
+        if (!result?.ok) throw new Error('sync_queue_failed');
+        return result;
+      });
+    }
     return query(client.rpc('admin_trigger_sync', {
       p_target: target,
       p_region: region,
@@ -1592,6 +1685,8 @@
     button.disabled = true;
     renderData();
     let failureMessage = '';
+    let successful = 0;
+    let attempted = 0;
 
     try {
       for (const [index, region] of regions.entries()) {
@@ -1604,6 +1699,8 @@
         if (!completedRun) {
           throw new Error(`La relance de ${REGION_LABELS[region] || region} continue trop longtemps.`);
         }
+        attempted += 1;
+        if (completedRun.status === 'success') successful += 1;
         state.bulkSync.completed = index + 1;
       }
     } catch (error) {
@@ -1612,7 +1709,7 @@
       state.bulkSync = { active: false, completed: 0, total: 0, region: null };
       invalidate('home', 'data');
       await loadView('data', true);
-      showFeedback(failureMessage || `${regions.length} zones ont été relancées une par une.`);
+      showFeedback(failureMessage || `${attempted} secteurs relancés : ${successful} terminés, ${attempted - successful} encore en attente ou en échec. Les données précédentes restent disponibles.`);
     }
   }
 
@@ -1622,6 +1719,7 @@
     while (Date.now() - startedAt < SYNC_WAIT_TIMEOUT_MS) {
       await delay(SYNC_POLL_INTERVAL_MS);
       const payload = await query(client.rpc('admin_data_v2'));
+      state.syncStatus = await queryOptional(client.rpc('admin_sync_status_v1'), null);
       state.data = payload;
       state.loaded.add('data');
       const run = (payload?.recentRuns ?? []).find((item) => item.id === runId);
@@ -2241,10 +2339,34 @@
   }
 
   function currentSyncRows(rows) {
+    if (Array.isArray(state.syncStatus?.runs)) return state.syncStatus.runs;
     if (!Array.isArray(rows)) return [];
     return rows.filter((run) => (
       run.source !== 'service_areas_osm' || OSM_REGIONS.includes(run.region)
     ));
+  }
+
+  function isNotApplicable(run) {
+    return run?.notApplicable === true || (run?.source === 'service_areas_osm' && run.region === 'north_1');
+  }
+
+  function syncDataDate(run) {
+    return run?.dataAsOf || run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
+  }
+
+  function isSyncDataFresh(run) {
+    if (isNotApplicable(run)) return false;
+    const timestamp = dateValue(syncDataDate(run));
+    const maximumAge = run?.source === 'fuel_prices_gov' ? 3 * 3600000 : 48 * 3600000;
+    const age = Date.now() - timestamp;
+    return timestamp > 0 && age >= 0 && age <= maximumAge;
+  }
+
+  function syncDatesLabel(run) {
+    const success = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
+    const attempt = run?.finishedAt || run?.startedAt || run?.requestedAt;
+    return `Dernière réussite : ${success ? formatDate(success) : 'inconnue'} · Dernière tentative : ${attempt ? formatDate(attempt) : 'aucune'}`
+      + (run?.dataAsOf && dateValue(run.dataAsOf) < dateValue(success) - 3600000 ? ` · Collecte commencée le ${formatDate(run.dataAsOf)}` : '');
   }
 
   function syncStatusLabel(status) {
@@ -2275,14 +2397,19 @@
   }
 
   function isAutomaticRetryPending(run) {
-    if (!isTransientSyncError(run) || run.triggerSource !== 'schedule') return false;
+    if (isNotApplicable(run) || !['error', 'partial'].includes(run?.status)) return false;
+    if (!isTransientSyncError(run) && !run.metadata?.retryable && run.status !== 'partial') return false;
+    const retryAttempt = Number(run.metadata?.retryAttempt) || 0;
+    const retryStillAvailable = ['schedule', 'admin'].includes(run.triggerSource)
+      || (run.triggerSource === 'retry' && retryAttempt < 3);
+    if (!retryStillAvailable) return false;
     const failedAt = dateValue(run.finishedAt || run.startedAt || run.requestedAt);
     return failedAt > 0 && Date.now() - failedAt < 3 * 60 * 60 * 1000;
   }
 
   function isActionableDataRun(run) {
-    if (!run || ACTIVE_SYNC_STATUSES.has(run.status)) return false;
-    if (!['error', 'partial'].includes(run.status)) return false;
+    if (!run || isNotApplicable(run) || ACTIVE_SYNC_STATUSES.has(run.status)) return false;
+    if (!['error', 'partial', 'never'].includes(run.status) && isSyncDataFresh(run)) return false;
     return !isAutomaticRetryPending(run);
   }
 
@@ -2301,6 +2428,8 @@
   }
 
   function dataActionLabel(run) {
+    if (run?.status === 'success') return 'Données anciennes';
+    if (run?.status === 'never') return 'Jamais actualisé';
     if (run?.status === 'partial') return 'Mise à jour incomplète';
     if (isTransientSyncError(run) && run?.triggerSource === 'retry') return 'Relance automatique échouée';
     if (isTransientSyncError(run) && run?.triggerSource === 'admin') return 'Relance manuelle échouée';
@@ -2308,10 +2437,14 @@
   }
 
   function syncRunStatusLabel(run) {
+    if (isNotApplicable(run)) return 'Non applicable';
+    if (run?.status === 'success' && !isSyncDataFresh(run)) return 'Données anciennes';
     return isAutomaticRetryPending(run) ? 'Relance prévue' : syncStatusLabel(run?.status);
   }
 
   function syncRunTone(run) {
+    if (isNotApplicable(run)) return 'muted';
+    if (run?.status === 'success' && !isSyncDataFresh(run)) return 'warning';
     return isAutomaticRetryPending(run) || run?.status === 'partial' ? 'warning' : syncTone(run?.status);
   }
 
@@ -2323,6 +2456,9 @@
 
   function friendlySyncError(message) {
     const value = String(message || '').toLowerCase();
+    if (/checkpoint_pending|details_batch_pending/.test(value)) return 'Import non terminé. Les morceaux reçus sont conservés pour la prochaine reprise.';
+    if (/http (401|403|406)/.test(value)) return 'Accès refusé par une source. Elle est mise en pause, sans contourner son refus.';
+    if (/overpass_cooldown/.test(value)) return 'Les sources publiques sont temporairement en pause. La progression est conservée.';
     if (isTransientSyncMessage(value)) {
       return 'La source publique n’a pas répondu à temps. Les données précédentes restent disponibles.';
     }
