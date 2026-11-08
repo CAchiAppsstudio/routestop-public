@@ -595,6 +595,8 @@
     const summary = storeDownloadSummary(state.storeDownloads);
     const automatic = state.storeDownloads?.automatic === true;
     const sync = Array.isArray(state.storeDownloads?.sync) ? state.storeDownloads.sync : [];
+    const manualPlatforms = ['ios', 'android'].filter(platform => !automatic
+      || !sync.some(row => row.platform === platform && row.status !== 'not_configured'));
     const details = row => row ? `Données au ${formatDateOnly(row.asOf)} · ${row.source === 'manual_store_report' || !row.source ? 'relevé manuel' : 'rapport automatique'}`
       : 'Rapport du store à renseigner';
     const statusText = platform => {
@@ -618,13 +620,13 @@
       <p class="hint">Les stores publient leurs chiffres avec du retard. La date des données peut donc être antérieure au dernier contrôle.</p>
       ${history.length ? `<details class="small-help"><summary>Historique des relevés communs</summary><div class="download-history"><table><thead><tr><th>Date des données</th><th>iOS</th><th>Android</th><th>Total</th></tr></thead><tbody>${history.map(row => `<tr><td>${escapeHtml(formatDateOnly(row.asOf))}</td><td>${formatNumber(row.ios)}</td><td>${formatNumber(row.android)}</td><td>${formatNumber(row.total)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
       <details class="small-help"><summary>Que comptent ces chiffres ?</summary><p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques.${automatic ? ' Seuls les rapports récupérés et vérifiés actualisent les chiffres. Le total s’arrête à la dernière date disponible pour les deux plateformes.' : ' Le relevé ne s’actualise pas automatiquement tant que le contrôle quotidien n’est pas activé.'}</p></details>
-      ${automatic ? '' : `
+      ${manualPlatforms.length ? `
       <details class="download-entry"><summary>Mettre à jour un relevé</summary>
         <p class="hint">Apple : « Premiers téléchargements » ou « Unités » dans Tendances, filtrées sur RouteStop. Google : « Acquisition d’utilisateurs » → « Nouveaux utilisateurs ». Choisir tous les pays et la même période. Pour un total depuis le lancement, prendre une date de début antérieure au lancement des deux versions. Ne pas utiliser « Audience ayant installé l’application ». Chaque store conserve son fuseau de reporting.</p>
         <div class="store-links"><a class="ghost" href="https://appstoreconnect.apple.com/trends" target="_blank" rel="noopener noreferrer">Ouvrir App Store Connect</a>
         <a class="ghost" href="https://play.google.com/console/u/0/developers/5130624800963001569/app/4974573420398337108/statistics" target="_blank" rel="noopener noreferrer">Ouvrir Google Play</a></div>
         <form data-store-downloads class="store-download-form">
-          <label>Plateforme<select name="platform" required><option value="ios">iPhone</option><option value="android">Android</option></select></label>
+          <label>Plateforme<select name="platform" required>${manualPlatforms.map(platform => `<option value="${platform}">${platform === 'ios' ? 'iPhone' : 'Android'}</option>`).join('')}</select></label>
           <label>Du<input name="periodStart" type="date" required></label>
           <label>Au (journée complète)<input name="asOf" type="date" required></label>
           <label>Premiers téléchargements<input name="count" type="number" min="0" max="9007199254740991" step="1" required></label>
@@ -632,7 +634,7 @@
           <button type="submit" ${state.storeDownloads ? '' : 'disabled'}>Enregistrer le relevé</button>
         </form>
       </details>
-      `}
+      ` : ''}
     </section>`;
   }
 
