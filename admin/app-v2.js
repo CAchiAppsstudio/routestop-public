@@ -549,7 +549,7 @@
       },
       {
         view: 'stats', icon: '↓', label: 'Téléchargements', value: count(downloads.total),
-        detail: downloads.total === null ? 'Relevés à compléter' : `Relevés au ${formatDateOnly(downloads.ios.asOf)} · manuels`,
+        detail: downloads.total === null ? 'Relevés à compléter' : `Données au ${formatDateOnly(downloads.totalAsOf)}${state.storeDownloads?.automatic ? ' · suivi quotidien' : ' · relevés manuels'}`,
         action: 'Voir iPhone et Android', tone: 'downloads',
       },
     ];
@@ -580,22 +580,45 @@
     const ios = valid('ios');
     const android = valid('android');
     const samePeriod = ios && android && ios.periodStart === android.periodStart && ios.asOf === android.asOf;
-    const total = samePeriod ? Number(ios.firstDownloads) + Number(android.firstDownloads) : null;
-    return { ios, android, total: Number.isSafeInteger(total) ? total : null };
+    const common = payload?.combined;
+    const aligned = ios && android && common && common.periodStart === ios.periodStart && common.periodStart === android.periodStart
+      && /^\d{4}-\d{2}-\d{2}$/.test(common.asOf) && common.asOf >= common.periodStart
+      && common.asOf <= ios.asOf && common.asOf <= android.asOf
+      && [common.ios, common.android, common.total].every(value => Number.isSafeInteger(value) && value >= 0)
+      && common.total === common.ios + common.android;
+    const total = aligned ? common.total : samePeriod ? Number(ios.firstDownloads) + Number(android.firstDownloads) : null;
+    return { ios, android, total: Number.isSafeInteger(total) ? total : null,
+      totalAsOf: aligned ? common.asOf : samePeriod ? ios.asOf : null };
   }
 
   function renderStoreDownloads() {
     const summary = storeDownloadSummary(state.storeDownloads);
-    const details = row => row ? `${formatDateOnly(row.periodStart)} → ${formatDateOnly(row.asOf)} · relevé manuel`
+    const automatic = state.storeDownloads?.automatic === true;
+    const sync = Array.isArray(state.storeDownloads?.sync) ? state.storeDownloads.sync : [];
+    const details = row => row ? `Données au ${formatDateOnly(row.asOf)} · ${row.source === 'manual_store_report' || !row.source ? 'relevé manuel' : 'rapport automatique'}`
       : 'Rapport du store à renseigner';
+    const statusText = platform => {
+      const item = sync.find(row => row.platform === platform);
+      if (!item) return '';
+      const label = item.status === 'ok' ? 'Contrôle réussi' : item.status === 'not_configured' ? 'Accès automatique à terminer'
+        : 'Rapport non récupéré · dernier chiffre conservé';
+      return `<p class="hint">${label}${item.checkedAt ? ` · ${escapeHtml(formatDate(item.checkedAt))}` : ''}</p>`;
+    };
+    const history = (Array.isArray(state.storeDownloads?.history) ? state.storeDownloads.history : []).filter(row =>
+      /^\d{4}-\d{2}-\d{2}$/.test(row.asOf) && [row.ios, row.android, row.total].every(value => Number.isSafeInteger(value) && value >= 0)
+      && row.total === row.ios + row.android).slice(0, 30);
     return `<section class="card downloads-panel">
-      <p class="hint">Premiers téléchargements · relevés manuels</p>
+      <p class="hint">Premiers téléchargements · ${automatic ? 'contrôle automatique chaque soir' : 'relevés manuels'}</p>
+      ${summary.total === null ? '' : `<h3>${formatNumber(summary.total)} au total</h3><p class="hint">Total sur une période commune, au ${escapeHtml(formatDateOnly(summary.totalAsOf))}.</p>`}
       <div class="download-strip platform-breakdown">
-        <div><strong>iPhone · ${summary.ios ? formatNumber(summary.ios.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.ios))}</p></div>
-        <div><strong>Android · ${summary.android ? formatNumber(summary.android.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.android))}</p></div>
+        <div><strong>iPhone / iPad · ${summary.ios ? formatNumber(summary.ios.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.ios))}</p>${statusText('ios')}</div>
+        <div><strong>Android · ${summary.android ? formatNumber(summary.android.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.android))}</p>${statusText('android')}</div>
       </div>
       ${summary.total === null ? '<p class="hint">Total indisponible : deux relevés sur la même période sont nécessaires.</p>' : ''}
-      <details class="small-help"><summary>Que comptent ces chiffres ?</summary><p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques et ne s’actualise pas automatiquement.</p></details>
+      <p class="hint">Les stores publient leurs chiffres avec du retard. La date des données peut donc être antérieure au dernier contrôle.</p>
+      ${history.length ? `<details class="small-help"><summary>Historique des relevés communs</summary><div class="download-history"><table><thead><tr><th>Date des données</th><th>iOS</th><th>Android</th><th>Total</th></tr></thead><tbody>${history.map(row => `<tr><td>${escapeHtml(formatDateOnly(row.asOf))}</td><td>${formatNumber(row.ios)}</td><td>${formatNumber(row.android)}</td><td>${formatNumber(row.total)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+      <details class="small-help"><summary>Que comptent ces chiffres ?</summary><p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques.${automatic ? ' Seuls les rapports récupérés et vérifiés actualisent les chiffres. Le total s’arrête à la dernière date disponible pour les deux plateformes.' : ' Le relevé ne s’actualise pas automatiquement tant que le contrôle quotidien n’est pas activé.'}</p></details>
+      ${automatic ? '' : `
       <details class="download-entry"><summary>Mettre à jour un relevé</summary>
         <p class="hint">Apple : « Premiers téléchargements » ou « Unités » dans Tendances, filtrées sur RouteStop. Google : « Acquisition d’utilisateurs » → « Nouveaux utilisateurs ». Choisir tous les pays et la même période. Pour un total depuis le lancement, prendre une date de début antérieure au lancement des deux versions. Ne pas utiliser « Audience ayant installé l’application ». Chaque store conserve son fuseau de reporting.</p>
         <div class="store-links"><a class="ghost" href="https://appstoreconnect.apple.com/trends" target="_blank" rel="noopener noreferrer">Ouvrir App Store Connect</a>
@@ -609,6 +632,7 @@
           <button type="submit" ${state.storeDownloads ? '' : 'disabled'}>Enregistrer le relevé</button>
         </form>
       </details>
+      `}
     </section>`;
   }
 

@@ -476,6 +476,25 @@ textarea:focus {
   margin-bottom: 20px;
 }
 
+.download-history {
+  overflow-x: auto;
+  max-height: 360px;
+  margin-top: 12px;
+}
+
+.download-history table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.download-history th, .download-history td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
 .downloads-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
