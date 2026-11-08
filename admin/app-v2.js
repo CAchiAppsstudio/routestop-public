@@ -602,7 +602,10 @@
     const statusText = platform => {
       const item = sync.find(row => row.platform === platform);
       if (!item) return '';
-      const label = item.status === 'ok' ? 'Contrôle réussi' : item.status === 'not_configured' ? 'Accès automatique à terminer'
+      const label = item.messageCode === 'google_report_pending' ? 'Google n’a pas encore fourni les journées suivantes'
+        : item.messageCode === 'google_report_http_403' ? 'Google refuse encore l’accès automatique · dernier chiffre conservé'
+        : item.messageCode === 'google_baseline_requires_review' ? 'Écart avec le relevé de référence · vérification nécessaire'
+        : item.status === 'ok' ? 'Contrôle réussi' : item.status === 'not_configured' ? 'Accès automatique à terminer'
         : 'Rapport non récupéré · dernier chiffre conservé';
       return `<p class="hint">${label}${item.checkedAt ? ` · ${escapeHtml(formatDate(item.checkedAt))}` : ''}</p>`;
     };
