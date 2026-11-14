@@ -2086,6 +2086,8 @@ body.drawer-open { overflow: hidden; }
 .detail-drawer .fuel-link-head h3 { font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { .dashboard-tile { transition: none; } .dashboard-tile:hover:not(:disabled) { transform: none; } }
 @media (max-width: 680px) {
+  .platform-breakdown { grid-template-columns: 1fr; align-items: start; }
+  .platform-breakdown > div + div { border-top: 1px solid var(--border); padding-top: 16px; }
   .quota-overview { padding: 18px; }
   .quota-overview-heading { gap: 8px; flex-wrap: wrap; }
   .quota-overview-heading > span:first-child { flex-basis: 100%; }
