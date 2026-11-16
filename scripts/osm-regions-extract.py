@@ -29,7 +29,7 @@ def collect(input_path, output_directory, data_as_of):
                 destination = output_directory / f"{region}.json"
                 previous = json.loads(destination.read_text()) if destination.exists() else None
                 incomplete_relations = []
-                snapshot = extractor.prepare(extractor.read_elements(regional, incomplete_relations), data_as_of, previous,
+                snapshot = extractor.prepare(extractor.read_elements(regional, incomplete_relations, include_area_geometry=True), data_as_of, previous,
                                              region=region, bounds=bounds, minimum_areas=3, minimum_motorways=3)
                 if incomplete_relations:
                     snapshot["incompleteRelations"] = incomplete_relations

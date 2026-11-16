@@ -53,6 +53,11 @@ linked areas with matching location, direction and motorway geometry. Unknown
 identities remain for manual review; these snapshots do not authorize adding new
 areas or changing fuel associations. Dates of receipt and source dates must remain
 distinct in the admin dashboard, including when some identities need review.
+Regional service-area ways include their closed outline when available. New
+nearby services are attached only when their point lies inside exactly one such
+outline, not merely within a distance threshold. Missing or ambiguous outlines
+do not add nearby services; existing information remains preserved. Centre's
+pre-existing parsing behavior is unchanged.
 
 The standard public Linux runner is free under GitHub's published pricing. No
 larger runner, cache, artefact upload, external paid service or Mac is used. The

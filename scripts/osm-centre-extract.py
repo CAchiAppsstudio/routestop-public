@@ -77,7 +77,7 @@ def prepare(elements, data_as_of, previous=None, now=None, region="center_2", bo
     }
 
 
-def read_elements(filename, incomplete_relations=None):
+def read_elements(filename, incomplete_relations=None, include_area_geometry=False):
     import osmium
 
     class Collector(osmium.SimpleHandler):
@@ -111,7 +111,9 @@ def read_elements(filename, incomplete_relations=None):
             self.boxes[("w", way.id)] = box
             tags = dict(way.tags)
             if relevant(tags):
-                geometry = [{"lat": latitude, "lon": longitude} for latitude, longitude in points] if tags.get("highway") == "motorway" else None
+                include_geometry = tags.get("highway") == "motorway" or (
+                    include_area_geometry and tags.get("highway") == "services" and len(points) >= 4 and points[0] == points[-1])
+                geometry = [{"lat": latitude, "lon": longitude} for latitude, longitude in points] if include_geometry else None
                 self.add("way", way.id, tags, box, geometry)
 
         def relation(self, relation):
