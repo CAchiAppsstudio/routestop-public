@@ -18,10 +18,10 @@ Resolving the dated download URL retries connection failures and other request
 errors up to four times, with a 15-second interval and a bounded retry window.
 Both the initial request and redirects require HTTPS. The dated Geofabrik URL
 must still pass validation before the existing resumable download starts.
-Each of the two download attempts permits up to 40 minutes and resumes the same
+Each of the three download attempts permits up to 40 minutes and resumes the same
 dated file. This accommodates a slow provider without restarting the 5 GB transfer.
 A transfer below 16 KiB/s for two minutes is interrupted instead of waiting
-indefinitely. The whole job is bounded to 95 minutes, including validation and
+indefinitely. The whole job is bounded to 135 minutes, including validation and
 cleanup; freshness and coverage checks are unchanged.
 If resolution or download fails, extraction and publication do not run; the last
 validated snapshot remains unchanged. A later successful collection must also

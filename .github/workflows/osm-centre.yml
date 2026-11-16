@@ -17,7 +17,7 @@ jobs:
   extract:
     if: github.repository == 'CAchiAppsstudio/routestop-public'
     runs-on: ubuntu-24.04
-    timeout-minutes: 95
+    timeout-minutes: 135
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check resources and install parser
@@ -37,11 +37,11 @@ jobs:
             --output /dev/null --write-out '%{url_effective}' https://download.geofabrik.de/europe/france-latest.osm.pbf)"
           [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
           echo "Validated dated source: $SOURCE_URL"
-          for ATTEMPT in 1 2; do
+          for ATTEMPT in 1 2 3; do
             if curl --fail --location --continue-at - --connect-timeout 20 --max-time 2400 \
               --proto '=https' --proto-redir '=https' --speed-limit 16384 --speed-time 120 \
               --output france.osm.pbf "$SOURCE_URL"; then break; fi
-            if [ "$ATTEMPT" = 2 ]; then exit 1; fi
+            if [ "$ATTEMPT" = 3 ]; then exit 1; fi
             sleep 30
           done
           DATA_AS_OF="$(osmium fileinfo -g header.option.osmosis_replication_timestamp france.osm.pbf)"
