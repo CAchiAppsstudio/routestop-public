@@ -17,7 +17,7 @@ jobs:
   extract:
     if: github.repository == 'CAchiAppsstudio/routestop-public'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 95
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check resources and install parser
@@ -38,7 +38,8 @@ jobs:
           [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
           echo "Validated dated source: $SOURCE_URL"
           for ATTEMPT in 1 2; do
-            if curl --fail --location --continue-at - --connect-timeout 20 --max-time 600 \
+            if curl --fail --location --continue-at - --connect-timeout 20 --max-time 2400 \
+              --proto '=https' --proto-redir '=https' --speed-limit 16384 --speed-time 120 \
               --output france.osm.pbf "$SOURCE_URL"; then break; fi
             if [ "$ATTEMPT" = 2 ]; then exit 1; fi
             sleep 30
