@@ -14,6 +14,16 @@ the processing time. Extracts older than 72 hours, incomplete geometries and
 substantially reduced area counts are rejected. Failed runs retain the last file.
 An extract being current does not guarantee every contributor's description is current.
 
+Resolving the dated download URL retries connection failures and other request
+errors up to four times, with a 15-second interval and a bounded retry window.
+Both the initial request and redirects require HTTPS. The dated Geofabrik URL
+must still pass validation before the existing resumable download starts.
+If resolution or download fails, extraction and publication do not run; the last
+validated snapshot remains unchanged. A later successful collection must also
+be imported by Supabase before the application's observations are refreshed.
+Changes to this workflow or its extraction script on `main` also trigger a run.
+Data-only commits do not trigger another collection.
+
 The standard public Linux runner is free under GitHub's published pricing. No
 larger runner, cache, artefact upload, external paid service or Mac is used. The
 approximately 5 GB source download is temporary on GitHub, never stored in Git.

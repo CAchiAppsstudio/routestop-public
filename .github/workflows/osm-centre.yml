@@ -1,6 +1,11 @@
 name: OSM Centre daily extract
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/osm-centre.yml'
+      - 'scripts/osm-centre-extract.py'
   schedule:
     - cron: '37 1 * * *'
 permissions:
@@ -26,9 +31,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/osm-centre"
           cd "$RUNNER_TEMP/osm-centre"
-          SOURCE_URL="$(curl --fail --head --location --silent --show-error --max-time 30 \
+          SOURCE_URL="$(curl --fail --head --location --silent --show-error \
+            --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 30 \
+            --retry 4 --retry-all-errors --retry-delay 15 --retry-max-time 180 \
             --output /dev/null --write-out '%{url_effective}' https://download.geofabrik.de/europe/france-latest.osm.pbf)"
           [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
+          echo "Validated dated source: $SOURCE_URL"
           for ATTEMPT in 1 2; do
             if curl --fail --location --continue-at - --connect-timeout 20 --max-time 600 \
               --output france.osm.pbf "$SOURCE_URL"; then break; fi
