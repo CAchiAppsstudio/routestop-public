@@ -21,13 +21,30 @@ must still pass validation before the existing resumable download starts.
 Each of the three download attempts permits up to 40 minutes and resumes the same
 dated file. This accommodates a slow provider without restarting the 5 GB transfer.
 A transfer below 16 KiB/s for two minutes is interrupted instead of waiting
-indefinitely. The whole job is bounded to 135 minutes, including validation and
+indefinitely. The whole job is bounded to 180 minutes, including validation and
 cleanup; freshness and coverage checks are unchanged.
 If resolution or download fails, extraction and publication do not run; the last
 validated snapshot remains unchanged. A later successful collection must also
 be imported by Supabase before the application's observations are refreshed.
 Changes to this workflow or its extraction script on `main` also trigger a run.
 Data-only commits do not trigger another collection.
+
+After Centre has been validated and saved independently, the same France download
+also feeds the 15 other scheduled motorway sectors in `regions/`. Their exact
+boundaries are versioned in `scripts/osm-regions.json`; the non-motorway Atlantic
+sector and legacy parent sectors are not added. Each regional file has its own
+source date, coverage counts and bounds. At least three service-area objects and
+three motorway ways are required; future replacements cannot lose more than 20%
+of the previous area's count. A failed sector keeps its previous file, does not
+block saving other validated sectors, and still makes the job report a failure.
+Temporary files are replaced only after validation, and all PBFs are removed at
+the end. The additional processing does not add another France download.
+
+Application imports only refresh services and tenants of existing, unambiguously
+linked areas with matching location, direction and motorway geometry. Unknown
+identities remain for manual review; these snapshots do not authorize adding new
+areas or changing fuel associations. Dates of receipt and source dates must remain
+distinct in the admin dashboard, including when some identities need review.
 
 The standard public Linux runner is free under GitHub's published pricing. No
 larger runner, cache, artefact upload, external paid service or Mac is used. The

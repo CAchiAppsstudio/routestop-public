@@ -1481,9 +1481,9 @@
     const status = active ? 'En cours' : isNotApplicable(run) ? 'Non applicable'
       : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : 'Données anciennes')
       : failed ? (isAutomaticRetryPending(run) ? 'Récentes · reprise prévue' : 'Récentes · essai échoué') : 'Données récentes';
-    const cloudCollection = region === 'center_2' && run?.metadata?.provider === 'geofabrik' && run.metadata.extractDataAsOf;
+    const cloudCollection = run?.metadata?.provider === 'geofabrik' && run.metadata.extractDataAsOf;
     const progress = cloudCollection ? null : run?.checkpoint;
-    const knownRefresh = region === 'center_2' ? run?.metadata?.knownRefresh : null;
+    const knownRefresh = region === 'center_2' || cloudCollection ? run?.metadata?.knownRefresh : null;
     const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="zone-row compact-zone">
