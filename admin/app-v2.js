@@ -1484,6 +1484,9 @@
     const cloudCollection = run?.metadata?.provider === 'geofabrik' && run.metadata.extractDataAsOf;
     const progress = cloudCollection ? null : run?.checkpoint;
     const knownRefresh = region === 'center_2' || cloudCollection ? run?.metadata?.knownRefresh : null;
+    const sourceWarnings = run?.metadata?.incompleteRelations?.length || 0;
+    const reviewLabel = knownRefresh?.reviewAreas ? `${knownRefresh.reviewAreas} aire(s) à vérifier`
+      : sourceWarnings ? `${sourceWarnings} objet(s) source à vérifier` : '';
     const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="zone-row compact-zone">
@@ -1499,7 +1502,7 @@
             ${run?.metadata?.deferred ? '<p>Aucune requête envoyée : cette attente ne consomme pas de relance.</p>' : ''}
           </details>
         </div>
-        <span class="pill ${tone}">${escapeHtml(!active && cloudCollection && Date.now() - dateValue(cloudCollection) <= 48 * 3600000 && run.metadata.retryable === false && knownRefresh?.reviewAreas ? `${knownRefresh.reviewAreas} aire(s) à vérifier` : status)}</span>
+        <span class="pill ${tone}">${escapeHtml(!active && cloudCollection && Date.now() - dateValue(cloudCollection) <= 48 * 3600000 && run.metadata.retryable === false && reviewLabel ? reviewLabel : status)}</span>
         <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) || isAutomaticRetryPending(run) ? 'disabled' : ''}>${active ? 'En cours' : isAutomaticRetryPending(run) ? 'Reprise prévue' : progress ? 'Reprendre' : 'Actualiser'}</button>
       </div>
     `;
@@ -2374,6 +2377,7 @@
 
   function dataActionLabel(run) {
     if (run?.metadata?.provider === 'geofabrik' && run.metadata.retryable === false && run.metadata.knownRefresh?.reviewAreas) return 'Aire à vérifier';
+    if (run?.metadata?.provider === 'geofabrik' && run.metadata.retryable === false && run.metadata.incompleteRelations?.length) return 'Source partielle à vérifier';
     if (run?.status === 'success') return 'Données anciennes';
     if (run?.status === 'never') return 'Jamais actualisé';
     if (run?.status === 'partial') return 'Mise à jour incomplète';
@@ -2402,6 +2406,11 @@
 
   function friendlySyncError(message) {
     const value = String(message || '').toLowerCase();
+    const review = value.match(/(\d+) aire\(s\) à vérifier/);
+    const incomplete = value.match(/(\d+) objet\(s\) source incomplet/);
+    if (review && value.includes('données précédentes conservées')) {
+      return `Collecte reçue. ${review[1]} aire(s) restent à vérifier.${Number(incomplete?.[1]) ? ` ${incomplete[1]} objet(s) OSM incomplet(s) mis de côté.` : ''} Les informations incertaines n’ont pas été remplacées.`;
+    }
     if (/checkpoint_pending|details_batch_pending/.test(value)) return 'Import non terminé. Les morceaux reçus sont conservés pour la prochaine reprise.';
     if (/http (401|403|406)/.test(value)) return 'Accès refusé par une source. Elle est mise en pause, sans contourner son refus.';
     if (/overpass_cooldown/.test(value)) return 'Les sources publiques sont temporairement en pause. La progression est conservée.';
