@@ -77,7 +77,7 @@ def prepare(elements, data_as_of, previous=None, now=None, region="center_2", bo
     }
 
 
-def read_elements(filename):
+def read_elements(filename, incomplete_relations=None):
     import osmium
 
     class Collector(osmium.SimpleHandler):
@@ -135,7 +135,9 @@ def read_elements(filename):
                 pending = unresolved
             missing = [identifier for identifier, tags, _members in pending if relevant(tags)]
             if missing:
-                raise ValueError(f"Incomplete relevant relations: {missing[:20]}")
+                if incomplete_relations is None or len(missing) > 5:
+                    raise ValueError(f"Incomplete relevant relations: {missing[:20]}")
+                incomplete_relations.extend(sorted(missing))
             return self.elements
 
     collector = Collector()

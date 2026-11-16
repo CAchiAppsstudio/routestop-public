@@ -40,6 +40,14 @@ block saving other validated sectors, and still makes the job report a failure.
 Temporary files are replaced only after validation, and all PBFs are removed at
 the end. The additional processing does not add another France download.
 
+Up to five incomplete OSM relations in a regional extract are quarantined rather
+than assigned a guessed geometry. Their IDs are published as `incompleteRelations`;
+all complete objects still pass the same coverage checks. More than five rejects
+the region. The application records these warnings as a partial observation and
+keeps previous data for any linked identity that cannot be verified. Centre keeps
+its original strict rejection behavior. A partial source is never reported as a
+fully verified region, and quarantined objects do not trigger endless retries.
+
 Application imports only refresh services and tenants of existing, unambiguously
 linked areas with matching location, direction and motorway geometry. Unknown
 identities remain for manual review; these snapshots do not authorize adding new
