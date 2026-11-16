@@ -1,0 +1,92 @@
+{
+  "north_2a": {
+    "south": 47.5,
+    "west": -2,
+    "north": 51.5,
+    "east": 0.25
+  },
+  "north_2b": {
+    "south": 47.5,
+    "west": 0.25,
+    "north": 51.5,
+    "east": 1
+  },
+  "north_3a1": {
+    "south": 47.5,
+    "west": 1,
+    "north": 51.5,
+    "east": 2
+  },
+  "north_3a2": {
+    "south": 47.5,
+    "west": 2,
+    "north": 51.5,
+    "east": 2.6
+  },
+  "north_3b": {
+    "south": 47.5,
+    "west": 2.6,
+    "north": 51.5,
+    "east": 4.2
+  },
+  "north_4": {
+    "south": 47.5,
+    "west": 4.2,
+    "north": 51.5,
+    "east": 7
+  },
+  "north_5": {
+    "south": 47.5,
+    "west": 7,
+    "north": 51.5,
+    "east": 10
+  },
+  "center_1": {
+    "south": 44.4,
+    "west": -2,
+    "north": 47.5,
+    "east": 1
+  },
+  "center_3a": {
+    "south": 44.4,
+    "west": 4.2,
+    "north": 47.5,
+    "east": 5.25
+  },
+  "center_3b": {
+    "south": 44.4,
+    "west": 5.25,
+    "north": 47.5,
+    "east": 6.3
+  },
+  "center_4": {
+    "south": 44.4,
+    "west": 6.3,
+    "north": 47.5,
+    "east": 8.5
+  },
+  "south_1": {
+    "south": 41,
+    "west": -2,
+    "north": 44.4,
+    "east": 1
+  },
+  "south_2": {
+    "south": 41,
+    "west": 1,
+    "north": 44.4,
+    "east": 4.2
+  },
+  "south_3": {
+    "south": 41,
+    "west": 4.2,
+    "north": 44.4,
+    "east": 7
+  },
+  "south_4": {
+    "south": 41,
+    "west": 7,
+    "north": 44.4,
+    "east": 10
+  }
+}

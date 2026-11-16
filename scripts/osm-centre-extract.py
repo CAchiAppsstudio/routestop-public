@@ -27,8 +27,9 @@ def center(bounds):
     return {"lat": round((bounds[0] + bounds[2]) / 2, 7), "lon": round((bounds[1] + bounds[3]) / 2, 7)}
 
 
-def inside(point):
-    return BOUNDS["south"] <= point["lat"] <= BOUNDS["north"] and BOUNDS["west"] <= point["lon"] <= BOUNDS["east"]
+def inside(point, bounds=None):
+    bounds = bounds or BOUNDS
+    return bounds["south"] <= point["lat"] <= bounds["north"] and bounds["west"] <= point["lon"] <= bounds["east"]
 
 
 def nearby(point, area, radius=1.1):
@@ -37,14 +38,16 @@ def nearby(point, area, radius=1.1):
     return math.hypot(latitude, longitude) <= radius
 
 
-def prepare(elements, data_as_of, previous=None, now=None):
+def prepare(elements, data_as_of, previous=None, now=None, region="center_2", bounds=None,
+            minimum_areas=20, minimum_motorways=20):
+    bounds = bounds or BOUNDS
     now = now or datetime.datetime.now(datetime.timezone.utc)
     timestamp = datetime.datetime.fromisoformat(data_as_of.replace("Z", "+00:00"))
     age = (now - timestamp).total_seconds()
     if not 0 <= age < 72 * 3600:
         raise ValueError("Source timestamp missing, future or older than 72 hours")
-    areas = [element for element in elements if element["tags"].get("highway") == "services" and inside(element["center"])]
-    if not 20 <= len(areas) <= 500:
+    areas = [element for element in elements if element["tags"].get("highway") == "services" and inside(element["center"], bounds)]
+    if not minimum_areas <= len(areas) <= 500:
         raise ValueError(f"Unexpected area count: {len(areas)}")
     selected = list(areas)
     for element in elements:
@@ -57,14 +60,14 @@ def prepare(elements, data_as_of, previous=None, now=None):
         elif any(nearby(element["center"], area["center"]) for area in areas):
             selected.append(element)
     motorway_count = sum(element["tags"].get("highway") == "motorway" for element in selected)
-    if motorway_count < 20:
+    if motorway_count < minimum_motorways:
         raise ValueError("Motorway geometry missing or incomplete")
     if previous:
         previous_time = datetime.datetime.fromisoformat(previous["source"]["dataAsOf"].replace("Z", "+00:00"))
         if timestamp < previous_time or len(areas) < previous["counts"]["areas"] * 0.8:
             raise ValueError("Refusing older or substantially incomplete replacement")
     return {
-        "version": 1, "region": "center_2", "bounds": BOUNDS,
+        "version": 1, "region": region, "bounds": bounds,
         "generatedAt": now.isoformat().replace("+00:00", "Z"),
         "source": {"provider": "geofabrik", "url": "https://download.geofabrik.de/europe/france-latest.osm.pbf",
                    "dataAsOf": timestamp.isoformat().replace("+00:00", "Z"),
