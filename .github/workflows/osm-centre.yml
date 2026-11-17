@@ -8,8 +8,10 @@ on:
       - 'scripts/osm-centre-extract.py'
       - 'scripts/osm-regions-extract.py'
       - 'scripts/osm-regions.json'
+      - 'scripts/osm-extracts-current.py'
   schedule:
     - cron: '37 1 * * *'
+    - cron: '17 11 * * *'
 permissions:
   contents: write
 concurrency:
@@ -22,7 +24,11 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check whether all regional sources are already current
+        id: freshness
+        run: python3 scripts/osm-extracts-current.py
       - name: Check resources and install parser
+        if: steps.freshness.outputs.current != 'true'
         run: |
           test "$(df --output=avail -B1 "$RUNNER_TEMP" | tail -1)" -gt 10000000000
           sudo apt-get update -qq
@@ -30,17 +36,18 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/osm-venv"
           "$RUNNER_TEMP/osm-venv/bin/pip" install --no-cache-dir osmium==4.3.2
       - name: Download public OSM data
+        if: steps.freshness.outputs.current != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/osm-centre"
           cd "$RUNNER_TEMP/osm-centre"
-          SOURCE_URL="$(curl --fail --head --location --silent --show-error \
+          SOURCE_URL="$(curl --ipv4 --fail --head --location --silent --show-error \
             --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 30 \
-            --retry 4 --retry-all-errors --retry-delay 15 --retry-max-time 180 \
+            --retry 8 --retry-all-errors --retry-delay 60 --retry-max-time 900 \
             --output /dev/null --write-out '%{url_effective}' https://download.geofabrik.de/europe/france-latest.osm.pbf)"
           [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
           echo "Validated dated source: $SOURCE_URL"
           for ATTEMPT in 1 2 3; do
-            if curl --fail --location --continue-at - --connect-timeout 20 --max-time 2400 \
+            if curl --ipv4 --fail --location --continue-at - --connect-timeout 20 --max-time 2400 \
               --proto '=https' --proto-redir '=https' --speed-limit 16384 --speed-time 120 \
               --output france.osm.pbf "$SOURCE_URL"; then break; fi
             if [ "$ATTEMPT" = 3 ]; then exit 1; fi
@@ -50,6 +57,7 @@ jobs:
           [[ "$DATA_AS_OF" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
           echo "DATA_AS_OF=$DATA_AS_OF" >> "$GITHUB_ENV"
       - name: Extract Centre without querying Overpass
+        if: steps.freshness.outputs.current != 'true'
         run: |
           cd "$RUNNER_TEMP/osm-centre"
           osmium extract --bbox=0.97,44.37,4.23,47.53 --strategy=smart france.osm.pbf -o centre.osm.pbf
@@ -58,10 +66,12 @@ jobs:
             -o selected.osm.pbf
           rm centre.osm.pbf
       - name: Validate and produce the small public snapshot
+        if: steps.freshness.outputs.current != 'true'
         run: |
           "$RUNNER_TEMP/osm-venv/bin/python" scripts/osm-centre-extract.py \
             "$RUNNER_TEMP/osm-centre/selected.osm.pbf" data/osm/centre.json --data-as-of "$DATA_AS_OF"
       - name: Save only validated public OSM data
+        if: steps.freshness.outputs.current != 'true'
         run: |
           git config user.name 'RouteStop OSM refresh'
           git config user.email 'actions@users.noreply.github.com'
@@ -72,13 +82,14 @@ jobs:
             git push origin HEAD:main
           fi
       - name: Build validated extracts for other regions
+        if: steps.freshness.outputs.current != 'true'
         id: regions
         continue-on-error: true
         run: |
           "$RUNNER_TEMP/osm-venv/bin/python" scripts/osm-regions-extract.py \
             "$RUNNER_TEMP/osm-centre/france.osm.pbf" data/osm/regions --data-as-of "$DATA_AS_OF"
       - name: Save only validated regional data
-        if: always() && steps.regions.outcome != 'skipped'
+        if: always() && (steps.regions.outcome == 'success' || steps.regions.outcome == 'failure')
         run: |
           if [ -d data/osm/regions ]; then
             git add data/osm/regions
