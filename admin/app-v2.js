@@ -113,6 +113,8 @@
   let realtimeChannel = null;
   let realtimeTimer = null;
   let activePoll = null;
+  let storeDownloadCheckedAt = 0;
+  let storeDownloadRefreshing = false;
 
   const $ = (id) => document.getElementById(id);
 
@@ -490,6 +492,7 @@
         state.emailQuota = emailQuota;
       }
       state.loaded.add(view);
+      if (['home', 'stats'].includes(view)) storeDownloadCheckedAt = Date.now();
       renderView(view);
       showFeedback(`Consulté à ${formatTime(new Date().toISOString())}`);
     } catch (error) {
@@ -597,26 +600,29 @@
     const statusText = platform => {
       const item = sync.find(row => row.platform === platform);
       if (!item) return '';
-      const label = item.messageCode === 'google_report_pending' ? 'Google n’a pas encore publié les journées suivantes · dernier chiffre conservé'
+      const label = item.messageCode === 'google_report_pending' ? 'Export automatique Google en retard · la Play Console peut afficher des chiffres plus récents'
+        : item.messageCode === 'google_report_stale' ? 'Export Google ancien ou incomplet · rattrapage automatique toujours actif'
         : item.messageCode === 'google_report_http_403' ? 'Google refuse encore l’accès automatique · dernier chiffre conservé'
         : item.messageCode === 'apple_report_http_403' ? 'Apple refuse l’accès aux rapports · vérifier les accords et les autorisations dans App Store Connect'
         : item.messageCode === 'google_baseline_requires_review' ? 'Écart avec le relevé de référence · vérification nécessaire'
         : item.status === 'ok' ? 'Contrôle réussi' : item.status === 'not_configured' ? 'Accès automatique à terminer'
         : 'Rapport non récupéré · dernier chiffre conservé';
-      return `<p class="hint">${label}${item.checkedAt ? ` · ${escapeHtml(formatDate(item.checkedAt))}` : ''}</p>`;
+      const overdue = item.checkedAt && Date.now() - Date.parse(item.checkedAt) > 26 * 3600000;
+      const sourceDate = /^\d{4}-\d{2}-\d{2}$/.test(item.sourceAsOf) ? ` · export au ${formatDateOnly(item.sourceAsOf)}` : '';
+      return `<p class="hint">${label}${sourceDate}${item.checkedAt ? ` · contrôlé le ${escapeHtml(formatDate(item.checkedAt))}` : ''}${overdue ? ' · contrôle automatique en retard : à vérifier' : ''}</p>`;
     };
     const history = (Array.isArray(state.storeDownloads?.history) ? state.storeDownloads.history : []).filter(row =>
       /^\d{4}-\d{2}-\d{2}$/.test(row.asOf) && [row.ios, row.android, row.total].every(value => Number.isSafeInteger(value) && value >= 0)
       && row.total === row.ios + row.android).slice(0, 30);
     return `<section class="card downloads-panel">
-      <p class="hint">Premiers téléchargements · ${automatic ? 'contrôle automatique chaque soir' : 'relevés manuels'}</p>
+      <p class="hint">Premiers téléchargements · ${automatic ? 'contrôle automatique 3 fois par jour' : 'relevés manuels'}</p>
       ${summary.total === null ? '' : `<h3>${formatNumber(summary.total)} téléchargements connus</h3><p class="hint">Somme des derniers relevés disponibles. Les dates peuvent différer entre iPhone et Android.</p>`}
       <div class="download-strip platform-breakdown">
         <div><strong>iPhone / iPad · ${summary.ios ? formatNumber(summary.ios.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.ios))}</p>${statusText('ios')}</div>
         <div><strong>Android · ${summary.android ? formatNumber(summary.android.firstDownloads) : '—'}</strong><p class="hint">${escapeHtml(details(summary.android))}</p>${statusText('android')}</div>
       </div>
       ${summary.total === null ? '<p class="hint">Total indisponible : deux relevés valides avec la même date de début sont nécessaires.</p>' : ''}
-      <p class="hint">Les stores publient leurs chiffres avec du retard. La date des données peut donc être antérieure au dernier contrôle.</p>
+      <p class="hint">Google annonce 3 à 7 jours de délai pour ses exports automatiques, parfois après la Play Console. Les nouveaux rapports sont rattrapés sans doublons. Ce n’est pas un compteur en temps réel.</p>
       ${history.length ? `<details class="small-help"><summary>Historique des relevés communs</summary><div class="download-history"><table><thead><tr><th>Date des données</th><th>iOS</th><th>Android</th><th>Total</th></tr></thead><tbody>${history.map(row => `<tr><td>${escapeHtml(formatDateOnly(row.asOf))}</td><td>${formatNumber(row.ios)}</td><td>${formatNumber(row.android)}</td><td>${formatNumber(row.total)}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
       <details class="small-help"><summary>Que comptent ces chiffres ?</summary><p class="hint">Mises à jour et réinstallations exclues. Une personne présente sur les deux plateformes peut compter deux fois. Ce total n’est pas un nombre d’utilisateurs uniques. Il additionne les derniers chiffres connus, pas nécessairement arrêtés au même jour. L’historique compare uniquement les relevés à date commune.${automatic ? ' Seuls les rapports récupérés et vérifiés actualisent les chiffres.' : ' Le relevé ne s’actualise pas automatiquement tant que le contrôle quotidien n’est pas activé.'}</p></details>
       ${manualPlatforms.length ? `
@@ -2247,6 +2253,7 @@
   function startActivePoll() {
     if (activePoll) return;
     activePoll = window.setInterval(() => {
+      refreshStoreDownloads();
       const dataActive = (state.data?.recentRuns ?? []).some((run) => ACTIVE_SYNC_STATUSES.has(run.status))
         || (state.home?.data?.activeRuns ?? []).length > 0;
       const releaseActive = state.releases.some((run) => ACTIVE_RELEASE_STATUSES.has(run.status))
@@ -2257,6 +2264,28 @@
         loadView(activeView, true);
       }
     }, 15000);
+  }
+
+  async function refreshStoreDownloads() {
+    if (!client || !session || storeDownloadRefreshing || document.visibilityState === 'hidden'
+      || !['home', 'stats'].includes(activeView) || state.loading.has(activeView)
+      || Date.now() - storeDownloadCheckedAt < 300000
+      || document.activeElement?.closest?.('[data-store-downloads]')) return;
+    storeDownloadRefreshing = true;
+    storeDownloadCheckedAt = Date.now();
+    try {
+      const currentSession = session;
+      const downloads = await query(client.rpc('admin_store_downloads_v1'));
+      if (session !== currentSession || !downloads || JSON.stringify(downloads) === JSON.stringify(state.storeDownloads)) return;
+      state.storeDownloads = downloads;
+      invalidate('home', 'stats');
+      if (activeView === 'home') renderHome();
+      else if (activeView === 'stats') renderStats();
+    } catch {
+      return;
+    } finally {
+      storeDownloadRefreshing = false;
+    }
   }
 
   function invalidate(...views) {
