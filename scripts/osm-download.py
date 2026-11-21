@@ -73,7 +73,12 @@ def download(directory):
 
 if __name__ == "__main__":
     try:
-        download(Path(sys.argv[1]))
+        if sys.argv[1] == "--check":
+            info, resolver = request(LATEST_URL, "/dev/null", 40, head=True)
+            if not DATED_URL.fullmatch(info.get("url_effective", "")):
+                raise RuntimeError("Unexpected dated OSM source.")
+        else:
+            download(Path(sys.argv[1]))
     except (OSError, RuntimeError, ValueError, IndexError) as error:
         print(f"::error::{error}", file=sys.stderr)
         sys.exit(1)

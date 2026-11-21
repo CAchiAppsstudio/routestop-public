@@ -21,13 +21,16 @@ concurrency:
 jobs:
   extract:
     if: github.repository == 'CAchiAppsstudio/routestop-public'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check whether all regional sources are already current
         id: freshness
         run: python3 scripts/osm-extracts-current.py
+      - name: Check source access before installing the parser
+        if: steps.freshness.outputs.current != 'true'
+        run: python3 scripts/osm-download.py --check
       - name: Check resources and install parser
         if: steps.freshness.outputs.current != 'true'
         run: |
