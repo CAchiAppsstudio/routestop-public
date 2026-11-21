@@ -9,6 +9,7 @@ on:
       - 'scripts/osm-regions-extract.py'
       - 'scripts/osm-regions.json'
       - 'scripts/osm-extracts-current.py'
+      - 'scripts/osm-download.py'
   schedule:
     - cron: '37 1 * * *'
     - cron: '17 11 * * *'
@@ -38,21 +39,8 @@ jobs:
       - name: Download public OSM data
         if: steps.freshness.outputs.current != 'true'
         run: |
-          mkdir -p "$RUNNER_TEMP/osm-centre"
+          python3 scripts/osm-download.py "$RUNNER_TEMP/osm-centre"
           cd "$RUNNER_TEMP/osm-centre"
-          SOURCE_URL="$(curl --ipv4 --fail --head --location --silent --show-error \
-            --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 30 \
-            --retry 8 --retry-all-errors --retry-delay 60 --retry-max-time 900 \
-            --output /dev/null --write-out '%{url_effective}' https://download.geofabrik.de/europe/france-latest.osm.pbf)"
-          [[ "$SOURCE_URL" =~ ^https://download\.geofabrik\.de/europe/france-[0-9]{6}\.osm\.pbf$ ]]
-          echo "Validated dated source: $SOURCE_URL"
-          for ATTEMPT in 1 2 3; do
-            if curl --ipv4 --fail --location --continue-at - --connect-timeout 20 --max-time 2400 \
-              --proto '=https' --proto-redir '=https' --speed-limit 16384 --speed-time 120 \
-              --output france.osm.pbf "$SOURCE_URL"; then break; fi
-            if [ "$ATTEMPT" = 3 ]; then exit 1; fi
-            sleep 30
-          done
           DATA_AS_OF="$(osmium fileinfo -g header.option.osmosis_replication_timestamp france.osm.pbf)"
           [[ "$DATA_AS_OF" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
           echo "DATA_AS_OF=$DATA_AS_OF" >> "$GITHUB_ENV"
