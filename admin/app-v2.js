@@ -528,7 +528,8 @@
     const rows = currentSyncRows(payload.data?.latestSyncs);
     const syncKnown = Array.isArray(state.syncStatus?.runs) || Array.isArray(payload.data?.latestSyncs);
     const pendingSyncs = rows.filter(run => !isNotApplicable(run) && !isSyncDataFresh(run)).length;
-    const recentFailures = rows.filter(run => isSyncDataFresh(run) && ['error', 'partial'].includes(run.status) && !run.metadata?.deferred).length;
+    const recentFailures = rows.filter(run => isSyncDataFresh(run) && ['error', 'partial'].includes(run.status) && !isOsmReviewOnly(run) && !run.metadata?.deferred).length;
+    const reviews = rows.filter(isOsmReviewOnly).length;
     const recentWaiting = rows.filter(run => isSyncDataFresh(run) && run.metadata?.deferred).length;
     const pendingReports = payload.reports?.pending;
     const dossierCount = window.RouteStopAreaReviewData?.pending?.length;
@@ -537,8 +538,8 @@
     const cards = [
       {
         view: 'data', icon: '↻', label: 'Données à actualiser', value: syncKnown ? count(pendingSyncs) : '—',
-        detail: !syncKnown ? 'État à vérifier' : `${pendingSyncs ? 'sources anciennes ou non vérifiées' : 'Toutes les sources sont récentes'}${recentFailures ? ` · ${recentFailures} essai${recentFailures > 1 ? 's' : ''} échoué${recentFailures > 1 ? 's' : ''} sur des données récentes` : ''}${recentWaiting ? ` · ${recentWaiting} reprise${recentWaiting > 1 ? 's' : ''} en attente sur des données récentes` : ''}`,
-        action: 'Voir les zones et relancer', tone: syncKnown && pendingSyncs ? 'attention' : '',
+        detail: !syncKnown ? 'État à vérifier' : `${pendingSyncs ? 'sources anciennes ou non vérifiées' : 'Toutes les sources sont récentes'}${recentFailures ? ` · ${recentFailures} essai${recentFailures > 1 ? 's' : ''} échoué${recentFailures > 1 ? 's' : ''}` : ''}${recentWaiting ? ` · ${recentWaiting} reprise(s) en attente` : ''}${reviews ? ` · ${reviews} zone(s) avec des fiches à vérifier, sans bloquer les autres aires` : ''}`,
+        action: 'Voir les dates et les zones', tone: syncKnown && (pendingSyncs || recentFailures) ? 'attention' : '',
       },
       {
         view: 'actions', icon: '✉', label: 'Signalements reçus', value: count(pendingReports),
@@ -716,7 +717,7 @@
         icon: '•',
         tone: 'warning',
         title: `${partials.length} source${partials.length > 1 ? 's' : ''} partielle${partials.length > 1 ? 's' : ''}`,
-        text: 'Certaines sources publiques n’ont pas répondu, sans perte des données précédentes.',
+        text: 'Consulte le détail : une fiche à vérifier ne signifie pas que toute la zone est bloquée.',
         view: 'data',
         action: 'Comprendre',
       });
@@ -872,7 +873,7 @@
     return [...APPLICABLE_OSM_REGIONS].sort((first, second) => {
       const timestamp = region => {
         const run = runs.find(item => item.region === region);
-        return dateValue(run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null));
+        return dateValue(syncDataDate(run));
       };
       return timestamp(first) - timestamp(second) || REGION_LABELS[first].localeCompare(REGION_LABELS[second], 'fr');
     });
@@ -1143,9 +1144,9 @@
             <div><h3>Zones de services</h3></div>
           </div>
           <div class="zone-list">
-            ${shownRegions.length ? shownRegions.map(region => renderOsmZoneRow(region, osmRuns, activeRuns)).join('') : emptyInline('Aucune zone à relancer.')}
+            ${shownRegions.length ? shownRegions.map(region => renderOsmZoneRow(region, osmRuns, activeRuns)).join('') : emptyInline('Aucune zone à suivre.')}
           </div>
-          <details class="small-help"><summary>En savoir plus</summary><p>16 zones suivies. Bretagne ouest : hors filtre autoroutier actuel. Une tentative en échec ne remplace pas la date de la dernière collecte complète.</p></details>
+          <details class="small-help"><summary>En savoir plus</summary><p>16 zones suivies. La date des données est celle du fournisseur, pas celle du dernier contrôle. Les fichiers sont préparés automatiquement sur GitHub, puis importés par Supabase, même quand ton Mac est éteint. Une fiche incertaine reste inchangée et ne bloque pas les autres aires. Bretagne ouest : hors filtre autoroutier actuel.</p></details>
         </section>
 
         <details class="card wide-card data-details">
@@ -1409,8 +1410,9 @@
     const regions = actionableRuns.filter(run => run.source === 'service_areas_osm' && run.region);
     const bulk = state.bulkSync;
     return `<div class="sync-action-bar">
-      <span>${bulk.active ? `Relance ${bulk.completed}/${bulk.total} · ${escapeHtml(REGION_LABELS[bulk.region] || 'Zone')}` : 'Les anciennes données restent disponibles.'}</span>
+      <span>${bulk.active ? `Relance ${bulk.completed}/${bulk.total} · ${escapeHtml(REGION_LABELS[bulk.region] || 'Zone')}` : 'Mises à jour automatiques sur serveur. Les anciennes données restent disponibles en cas de retard.'}</span>
       ${regions.length > 1 || bulk.active ? `<button data-sync-all-regions type="button" ${bulk.active ? 'disabled' : ''}>${bulk.active ? 'Relance en cours…' : 'Relancer les zones en attente'}</button>` : ''}
+      ${regions.some(isCloudOsmRun) ? '<p class="hint">Actualiser relit le fichier disponible : cela ne force pas le fournisseur à produire des données plus récentes.</p>' : ''}
       ${automaticRetries.length ? `<p class="hint">${automaticRetries.length} reprise(s) automatique(s) prévue(s).</p>` : ''}
     </div>`;
   }
@@ -1482,34 +1484,37 @@
     const run = runs.find((item) => item.region === region);
     const active = activeRuns.some((item) => item.source === 'service_areas_osm' && item.region === region);
     const fresh = isSyncDataFresh(run);
-    const failed = ['error', 'partial'].includes(run?.status);
+    const reviewOnly = isOsmReviewOnly(run);
+    const failed = ['error', 'partial'].includes(run?.status) && !reviewOnly;
     const tone = active ? 'info' : fresh && failed ? 'warning' : syncRunTone(run);
     const status = active ? 'En cours' : isNotApplicable(run) ? 'Non applicable'
-      : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : 'Données anciennes')
+      : !fresh ? (isAutomaticRetryPending(run) ? 'Anciennes · reprise prévue' : syncDataDate(run) ? 'Données anciennes' : 'Date source inconnue')
       : failed ? (isAutomaticRetryPending(run) ? 'Récentes · reprise prévue' : 'Récentes · essai échoué') : 'Données récentes';
-    const cloudCollection = run?.metadata?.provider === 'geofabrik' && run.metadata.extractDataAsOf;
+    const cloudCollection = isCloudOsmRun(run);
     const progress = cloudCollection ? null : run?.checkpoint;
     const knownRefresh = region === 'center_2' || cloudCollection ? run?.metadata?.knownRefresh : null;
     const sourceWarnings = run?.metadata?.incompleteRelations?.length || 0;
     const reviewLabel = knownRefresh?.reviewAreas ? `${knownRefresh.reviewAreas} aire(s) à vérifier`
       : sourceWarnings ? `${sourceWarnings} objet(s) source à vérifier` : '';
-    const lastSuccess = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     return `
       <div class="zone-row compact-zone">
         <div class="zone-description">
           <strong>${escapeHtml(REGION_LABELS[region])}</strong>
-          <p>${cloudCollection ? `Fichier reçu : ${escapeHtml(formatDate(run.finishedAt))} · Données du ${escapeHtml(formatDate(cloudCollection))}` : `Collecte complète : ${lastSuccess ? escapeHtml(formatDate(lastSuccess)) : 'non connue'}`}</p>
-          ${knownRefresh ? `<p>Services revérifiés : ${formatNumber(knownRefresh.verifiedAreas)}/${formatNumber(knownRefresh.linkedAreas)} aires déjà reliées.${knownRefresh.lastCheckedAt ? ` Dernier contrôle : ${escapeHtml(formatDate(knownRefresh.lastCheckedAt))}.` : ''}</p>` : ''}
+          <p>${escapeHtml(syncDatesLabel(run))}</p>
+          ${knownRefresh ? `<p>${formatNumber(knownRefresh.verifiedAreas)} / ${formatNumber(knownRefresh.linkedAreas)} aires reliées vérifiées dans le fichier.</p>` : ''}
+          ${reviewLabel ? `<p>${escapeHtml(reviewLabel)} : anciennes informations conservées pour ces fiches uniquement.</p>` : ''}
+          ${cloudCollection && !fresh ? '<p>En attente de données plus récentes. Relire le même fichier ne change pas leur date.</p>' : ''}
           <details><summary>Détail de la collecte</summary>
-            ${knownRefresh ? `<p>Les aires connues passent en priorité, sans attendre la recherche de nouvelles aires. ${formatNumber(knownRefresh.reviewAreas)} aire(s) demandent une vérification ; les informations précédentes sont conservées.</p>` : ''}
-            <p>${isNotApplicable(run) ? 'Hors filtre autoroutier actuel. Aucune donnée existante supprimée.' : escapeHtml(syncDatesLabel(run))}</p>
+            ${knownRefresh ? `<p>${formatNumber(knownRefresh.updatedAreas)} aire(s) actualisée(s), ${formatNumber(knownRefresh.alreadyNewer)} déjà vérifiée(s) avec des données aussi récentes ou plus récentes. Les nouvelles aires ne sont pas ajoutées automatiquement.</p>` : ''}
+            ${isNotApplicable(run) ? '<p>Hors filtre autoroutier actuel. Aucune donnée existante supprimée.</p>' : ''}
+            ${reviewOnly ? '<p>Une nouvelle relance ne résout pas une identité incertaine. Les autres aires ont bien été contrôlées.</p>' : ''}
             ${run?.message ? `<p>${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
             ${progress ? `<p>Progression conservée : ${progress.discoveryComplete ? 'repérage terminé' : `${formatNumber(progress.discoveryParts)}/${formatNumber(progress.discoveryTotal || 4)} portions repérées`}, ${formatNumber(progress.completedBatches)} lots de détails reçus.</p>` : ''}
             ${run?.metadata?.deferred ? '<p>Aucune requête envoyée : cette attente ne consomme pas de relance.</p>' : ''}
           </details>
         </div>
-        <span class="pill ${tone}">${escapeHtml(!active && cloudCollection && Date.now() - dateValue(cloudCollection) <= 48 * 3600000 && run.metadata.retryable === false && reviewLabel ? reviewLabel : status)}</span>
-        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) || isAutomaticRetryPending(run) ? 'disabled' : ''}>${active ? 'En cours' : isAutomaticRetryPending(run) ? 'Reprise prévue' : progress ? 'Reprendre' : 'Actualiser'}</button>
+        <span class="pill ${tone}">${escapeHtml(status)}</span>
+        <button class="ghost small" data-sync-target="osm_region" data-sync-region="${escapeHtml(region)}" type="button" ${active || state.bulkSync.active || isNotApplicable(run) || isAutomaticRetryPending(run) || (fresh && reviewOnly) ? 'disabled' : ''}>${active ? 'En cours' : isAutomaticRetryPending(run) ? 'Reprise prévue' : fresh && reviewOnly ? 'Contrôle terminé' : progress ? 'Reprendre' : cloudCollection ? 'Relire le fichier' : 'Actualiser'}</button>
       </div>
     `;
   }
@@ -1520,13 +1525,16 @@
       ? REGION_LABELS[run.region] || run.region
       : syncSourceLabel(run.source);
     const trigger = run.triggerSource === 'admin' ? 'Manuel' : run.triggerSource === 'retry' ? 'Relance' : 'Planifié';
-    const detail = run.message
+    const detail = isOsmReviewOnly(run)
+      ? `${formatNumber(run.metadata.knownRefresh.verifiedAreas)} aires vérifiées · fiches incertaines conservées`
+      : run.message
       ? friendlySyncError(run.message)
-      : `${formatNumber(run.rowsUpserted || 0)} ligne${Number(run.rowsUpserted) > 1 ? 's' : ''} mise${Number(run.rowsUpserted) > 1 ? 's' : ''} à jour`;
+      : run.status === 'success' && Number(run.rowsUpserted) === 0 ? 'Contrôle terminé, aucune modification nécessaire'
+        : `${formatNumber(run.rowsUpserted || 0)} ligne${Number(run.rowsUpserted) > 1 ? 's' : ''} mise${Number(run.rowsUpserted) > 1 ? 's' : ''} à jour`;
     return `
       <div class="history-row">
         <span class="row-icon ${tone}">${run.status === 'success' ? '✓' : ACTIVE_SYNC_STATUSES.has(run.status) ? '↻' : '!'}</span>
-        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(trigger)} · ${escapeHtml(detail)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p></div>
+        <div><strong>${escapeHtml(label)}</strong><p>${escapeHtml(trigger)} · ${escapeHtml(detail)} · ${escapeHtml(relativeDate(run.finishedAt || run.startedAt || run.requestedAt))}</p>${isCloudOsmRun(run) ? `<p>${escapeHtml(syncDatesLabel(run))}</p>` : ''}</div>
         <span class="pill ${tone}">${escapeHtml(run.status === 'success' ? 'Terminée' : syncRunStatusLabel(run))}</span>
       </div>
     `;
@@ -2326,7 +2334,18 @@
   }
 
   function syncDataDate(run) {
+    if (isCloudOsmRun(run)) return run.metadata.extractDataAsOf || run.metadata.dataAsOf || null;
     return run?.dataAsOf || run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
+  }
+
+  function isCloudOsmRun(run) {
+    return run?.source === 'service_areas_osm' && run.metadata?.provider === 'geofabrik';
+  }
+
+  function isOsmReviewOnly(run) {
+    return isCloudOsmRun(run) && run.status === 'partial' && run.metadata.retryable === false
+      && Number(run.metadata.knownRefresh?.verifiedAreas) > 0
+      && (Number(run.metadata.knownRefresh?.reviewAreas) > 0 || Boolean(run.metadata.incompleteRelations?.length));
   }
 
   function isSyncDataFresh(run) {
@@ -2340,6 +2359,10 @@
   function syncDatesLabel(run) {
     const success = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     const attempt = run?.finishedAt || run?.startedAt || run?.requestedAt;
+    if (isCloudOsmRun(run)) {
+      const source = syncDataDate(run);
+      return `Données du ${source ? formatDate(source) : 'fournisseur : date inconnue'} · Dernier contrôle : ${attempt ? formatDate(attempt) : 'aucun'}`;
+    }
     return `Dernière réussite : ${success ? formatDate(success) : 'inconnue'} · Dernière tentative : ${attempt ? formatDate(attempt) : 'aucune'}`
       + (run?.dataAsOf && dateValue(run.dataAsOf) < dateValue(success) - 3600000 ? ` · Collecte commencée le ${formatDate(run.dataAsOf)}` : '');
   }
@@ -2386,6 +2409,7 @@
 
   function isActionableDataRun(run) {
     if (!run || isNotApplicable(run) || ACTIVE_SYNC_STATUSES.has(run.status)) return false;
+    if (isOsmReviewOnly(run) && isSyncDataFresh(run)) return false;
     if (!['error', 'partial', 'never'].includes(run.status) && isSyncDataFresh(run)) return false;
     return !isAutomaticRetryPending(run);
   }
@@ -2417,6 +2441,7 @@
 
   function syncRunStatusLabel(run) {
     if (isNotApplicable(run)) return 'Non applicable';
+    if (isOsmReviewOnly(run)) return isSyncDataFresh(run) ? 'Fiches à vérifier' : 'Données anciennes · fiches à vérifier';
     if (run?.status === 'success' && !isSyncDataFresh(run)) return 'Données anciennes';
     return isAutomaticRetryPending(run) ? 'Relance prévue' : syncStatusLabel(run?.status);
   }
@@ -2441,6 +2466,8 @@
       return `Collecte reçue. ${review[1]} aire(s) restent à vérifier.${Number(incomplete?.[1]) ? ` ${incomplete[1]} objet(s) OSM incomplet(s) mis de côté.` : ''} Les informations incertaines n’ont pas été remplacées.`;
     }
     if (/checkpoint_pending|details_batch_pending/.test(value)) return 'Import non terminé. Les morceaux reçus sont conservés pour la prochaine reprise.';
+    if (/stale_or_future/.test(value)) return 'La date du fichier fournisseur est trop ancienne ou incohérente. Import refusé ; les données précédentes sont conservées.';
+    if (/extract.*fetch|failed to fetch|curl.*(6|7)|unreachable/.test(value)) return 'Le fichier source n’a pas pu être téléchargé. Les données précédentes restent disponibles.';
     if (/http (401|403|406)/.test(value)) return 'Accès refusé par une source. Elle est mise en pause, sans contourner son refus.';
     if (/overpass_cooldown/.test(value)) return 'Les sources publiques sont temporairement en pause. La progression est conservée.';
     if (isTransientSyncMessage(value)) {
