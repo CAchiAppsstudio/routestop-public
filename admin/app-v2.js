@@ -2362,8 +2362,8 @@
     const aprr = run?.source === 'service_areas_operator' ? run.metadata?.aprrCoverage : null;
     if (aprr) {
       return `Dernier contrôle : ${attempt ? formatDate(attempt) : 'inconnu'} · APRR : ${formatNumber(aprr.updated)}/${formatNumber(aprr.total)} fiches relues, ${formatNumber(aprr.preserved)} conservées`
-        + (aprr.oldestPreservedAt ? ` · Plus ancienne lecture conservée : ${formatDate(aprr.oldestPreservedAt)}` : '')
-        + ' · Date de publication APRR non fournie.';
+        + (aprr.oldestPreservedAt ? ` · Plus ancienne date enregistrée : ${formatDate(aprr.oldestPreservedAt)}` : '')
+        + ' · Fraîcheur APRR des fiches conservées non confirmée. Date de publication APRR non fournie.';
     }
     if (isCloudOsmRun(run)) {
       const source = syncDataDate(run);
