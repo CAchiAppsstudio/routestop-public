@@ -2359,6 +2359,12 @@
   function syncDatesLabel(run) {
     const success = run?.lastSuccessfulAt || (run?.status === 'success' ? run.finishedAt : null);
     const attempt = run?.finishedAt || run?.startedAt || run?.requestedAt;
+    const aprr = run?.source === 'service_areas_operator' ? run.metadata?.aprrCoverage : null;
+    if (aprr) {
+      return `Dernier contrôle : ${attempt ? formatDate(attempt) : 'inconnu'} · APRR : ${formatNumber(aprr.updated)}/${formatNumber(aprr.total)} fiches relues, ${formatNumber(aprr.preserved)} conservées`
+        + (aprr.oldestPreservedAt ? ` · Plus ancienne lecture conservée : ${formatDate(aprr.oldestPreservedAt)}` : '')
+        + ' · Date de publication APRR non fournie.';
+    }
     if (isCloudOsmRun(run)) {
       const source = syncDataDate(run);
       return `Données du ${source ? formatDate(source) : 'fournisseur : date inconnue'} · Dernier contrôle : ${attempt ? formatDate(attempt) : 'aucun'}`;
