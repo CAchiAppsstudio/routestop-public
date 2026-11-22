@@ -6,10 +6,19 @@ import sys
 from pathlib import Path
 
 
-LATEST_URL = "https://download.geofabrik.de/europe/france-latest.osm.pbf"
+LATEST_URLS = (
+    "https://download.geofabrik.de/europe/france/france-latest.osm.pbf",
+    "https://download.geofabrik.de/europe/france-latest.osm.pbf",
+)
 DATED_URL = re.compile(r"https://download\.geofabrik\.de/europe/(?:france/)?france-[0-9]{6}\.osm\.pbf")
 RESOLVERS = (None, "https://cloudflare-dns.com/dns-query", "https://dns.google/dns-query")
 TRANSPORT_ERRORS = {5, 6, 7, 18, 28, 35, 52, 55, 56}
+
+
+class RequestError(RuntimeError):
+    def __init__(self, status, code):
+        self.status = status
+        super().__init__(f"OSM request refused or invalid (HTTP {status}, curl {code}); no bypass.")
 
 
 def request(url, output, timeout, *, head=False, resume=False, preferred=None):
@@ -42,16 +51,29 @@ def request(url, output, timeout, *, head=False, resume=False, preferred=None):
             print(result.stderr.strip(), file=sys.stderr)
         retryable = result.returncode in TRANSPORT_ERRORS or status in (408, 500, 502, 503, 504)
         if not retryable:
-            raise RuntimeError(f"OSM request refused or invalid (HTTP {status}, curl {result.returncode}); no bypass.")
+            raise RequestError(status, result.returncode)
     raise RuntimeError("OSM provider unreachable through the three DNS routes; existing snapshots preserved.")
+
+
+def resolve_source():
+    for url in LATEST_URLS:
+        try:
+            info, resolver = request(url, "/dev/null", 40, head=True)
+        except RequestError as error:
+            if error.status not in (404, 410):
+                raise
+            print(f"Official OSM alias unavailable: {url}", flush=True)
+            continue
+        source_url = info.get("url_effective", "")
+        if not DATED_URL.fullmatch(source_url):
+            raise RuntimeError(f"Unexpected dated OSM source: {source_url}")
+        return source_url, resolver
+    raise RuntimeError("Both official OSM aliases are unavailable; existing snapshots preserved.")
 
 
 def download(directory):
     directory.mkdir(parents=True, exist_ok=True)
-    info, resolver = request(LATEST_URL, "/dev/null", 40, head=True)
-    source_url = info.get("url_effective", "")
-    if not DATED_URL.fullmatch(source_url):
-        raise RuntimeError(f"Unexpected dated OSM source: {source_url}")
+    source_url, resolver = resolve_source()
     print(f"Validated dated source: {source_url}", flush=True)
     checksum_path = directory / "france.osm.pbf.md5"
     request(source_url + ".md5", checksum_path, 40, preferred=resolver)
@@ -74,9 +96,8 @@ def download(directory):
 if __name__ == "__main__":
     try:
         if sys.argv[1] == "--check":
-            info, resolver = request(LATEST_URL, "/dev/null", 40, head=True)
-            if not DATED_URL.fullmatch(info.get("url_effective", "")):
-                raise RuntimeError("Unexpected dated OSM source.")
+            source_url, resolver = resolve_source()
+            print(f"Validated dated source: {source_url}", flush=True)
         else:
             download(Path(sys.argv[1]))
     except (OSError, RuntimeError, ValueError, IndexError) as error:
