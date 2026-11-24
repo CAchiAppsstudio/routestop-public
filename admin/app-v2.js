@@ -1449,6 +1449,7 @@
           <h3>${escapeHtml(title)}</h3>
           <p>${escapeHtml(description)}</p>
           <p style="margin-top:8px">${escapeHtml(syncDatesLabel(run))}</p>
+          ${renderOperatorReviews(run)}
           ${run?.message ? `<p style="margin-top:6px;color:var(--red)">${escapeHtml(friendlySyncError(run.message))}</p>` : ''}
         </div>
         <div class="source-actions">
@@ -2447,7 +2448,7 @@
 
   function syncRunStatusLabel(run) {
     if (isNotApplicable(run)) return 'Non applicable';
-    if (isOsmReviewOnly(run)) return isSyncDataFresh(run) ? 'Fiches à vérifier' : 'Données anciennes · fiches à vérifier';
+    if (isOsmReviewOnly(run)) return isSyncDataFresh(run) ? 'Collecte reçue · fiches à vérifier' : 'Données anciennes · fiches à vérifier';
     if (run?.status === 'success' && !isSyncDataFresh(run)) return 'Données anciennes';
     return isAutomaticRetryPending(run) ? 'Relance prévue' : syncStatusLabel(run?.status);
   }
@@ -2466,6 +2467,9 @@
 
   function friendlySyncError(message) {
     const value = String(message || '').toLowerCase();
+    const aprr = value.match(/aprr: (\d+)\/(\d+) fiches actualisées ; (\d+) conservées/);
+    if (aprr && !value.includes(' | ')) return `APRR : ${aprr[1]}/${aprr[2]} fiches relues. ${aprr[3]} fiches restent non confirmées : consulte les raisons ci-dessus. Elles n’ont pas été remplacées.`;
+    if (/http 30[1278]|redirect|protocol.*http/.test(value)) return 'Le fournisseur a renvoyé vers une adresse non validée. Téléchargement arrêté par sécurité ; les anciennes données sont conservées.';
     const review = value.match(/(\d+) aire\(s\) à vérifier/);
     const incomplete = value.match(/(\d+) objet\(s\) source incomplet/);
     if (review && value.includes('données précédentes conservées')) {
@@ -2484,6 +2488,26 @@
       return 'Aucune aire n’a pu être confirmée. Les données précédentes restent disponibles.';
     }
     return 'La mise à jour n’a pas abouti. Les données précédentes restent disponibles.';
+  }
+
+  function renderOperatorReviews(run) {
+    const coverage = run?.source === 'service_areas_operator' ? run.metadata?.aprrCoverage : null;
+    if (!coverage) return '';
+    const reasons = {
+      services_not_documented: 'APRR répond, mais la liste des services est vide. Ce n’est pas une preuve d’absence de services.',
+      response_unavailable: 'Réponse absente ou invalide.',
+      name_changed: 'Nom différent : correspondance à vérifier.',
+      coordinates_changed: 'Position différente : correspondance à vérifier.',
+      highway_changed: 'Autoroute différente : correspondance à vérifier.',
+    };
+    const retained = (coverage.preservedDetails || []).map(area =>
+      `<p><strong>${escapeHtml(area.name)}</strong> : ${escapeHtml(reasons[area.reason] || 'Données à vérifier.')}</p>`);
+    const candidates = (coverage.newAreaDetails || []).map(area =>
+      `<p><strong>${escapeHtml(area.name)}</strong> : ${area.reason === 'linked_highway_conflict'
+        ? `deux références indiquent ${escapeHtml(area.storedHighway)} et ${escapeHtml(area.highway)}. Aucune fusion automatique.`
+        : 'nouvelle référence à vérifier avant ajout.'}</p>`);
+    return retained.length || candidates.length
+      ? `<details><summary>Voir les fiches APRR non confirmées</summary>${retained.join('')}${candidates.join('')}<p>Les données existantes restent disponibles. Aucune aire n’est supprimée ou déclarée sans carburant sur la seule base d’une réponse vide.</p></details>` : '';
   }
 
   function releaseStatusLabel(status) {
