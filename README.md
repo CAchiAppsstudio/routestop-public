@@ -17,11 +17,16 @@ séparé.
   [gratuits](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
   Aucun serveur payant, cache ni stockage d’artefacts n’est ajouté.
 - Deux passages quotidiens sont prévus à 01:37 et 11:17 UTC. GitHub peut
-  retarder les tâches planifiées. Si les 16 fichiers ont déjà une date source
-  suffisamment récente, le téléchargement national est évité.
+  retarder les tâches planifiées. Le workflow « OSM France - collecte des 16
+  secteurs » vérifie d’abord la version réellement proposée par le fournisseur.
+  Si les 16 fichiers correspondent déjà à cette version récente, le
+  téléchargement national est évité, même lors d’un lancement manuel.
 - `python3 scripts/osm-download.py --check` vérifie l’accès sans télécharger
   le fichier national. Les anciens et nouveaux chemins datés officiels sont
-  acceptés ; un autre domaine, HTTP ou un fichier non daté est refusé.
+  acceptés. Un renvoi HTTP du fournisseur est converti en HTTPS avant tout
+  accès, uniquement pour ces chemins officiels. Aucune requête HTTP n’est
+  envoyée ; les domaines inattendus, boucles et certificats invalides bloquent
+  la collecte sans remplacer les données précédentes.
 - Le téléchargement reprend uniquement le même fichier daté. Son empreinte MD5
   officielle est vérifiée avant analyse, en complément de HTTPS. En cas de
   problème de connexion, deux résolveurs DNS publics sont essayés. Aucun refus
@@ -47,3 +52,12 @@ En cas de retard, contrôler d’abord le workflow GitHub, puis la date
 `source.dataAsOf` de `data/osm/centre.json`, puis la date source effectivement
 enregistrée par Supabase. Une exécution manuelle réussie ne démontre pas à elle
 seule la régularité des prochaines nuits.
+
+### Réponses APRR incomplètes
+
+Une liste de services vide ne prouve pas l’absence de station-service. Les
+fiches concernées restent conservées et sont nommées dans les alertes et
+l’administration, avec la raison de la vérification. Une fiche liée à un nouvel
+identifiant mais à une autre autoroute n’est pas fusionnée automatiquement.
+Les erreurs de téléchargement et les dates anciennes restent signalées
+séparément : recevoir des données ne signifie pas avoir validé chaque aire.
