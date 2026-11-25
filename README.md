@@ -9,6 +9,19 @@ Pages publiques officielles de RouteStop :
 Le code de l’application et ses configurations privées restent dans un dépôt
 séparé.
 
+## Administration CachiAppsStudio
+
+Le portail [CachiAppsStudio](https://routestop.fr/studio-admin/) reprend la
+session de connexion de RouteStop. Il ouvre soit l’administration existante
+de RouteStop, soit le suivi des incidents, versions et téléchargements de PodLegacy.
+
+La page utilise le projet Supabase de RouteStop. L’autorisation RouteStop
+reste gérée par son administration. Pour PodLegacy, l’accès est accordé
+séparément dans `studio_podlegacy_admins` et vérifié pour chaque accès aux
+données. Le [schéma PodLegacy](.github/studio-admin/0001_podlegacy.sql) est
+appliqué via les migrations Supabase. Les habilitations et les relevés
+sont conservés dans Supabase.
+
 ## Collecte automatique des services OSM
 
 - Le workflow `.github/workflows/osm-centre.yml` tourne sur un serveur

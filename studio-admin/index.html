@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>CachiAppsStudio · Administration</title>
+  <link rel="icon" type="image/png" href="/assets/cachi-appsstudio-logo-928a21d052bb.png">
+  <link rel="stylesheet" href="style.css?v=20261125">
+  <script defer src="/admin/config.js"></script>
+  <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
+  <script defer src="session.js?v=20261125"></script>
+  <script defer src="./home.js?v=20261125"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Aller au contenu</a>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="/studio-admin/">
+        <span class="brand-image"><img src="/assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="52" height="42"></span>
+        <span>CachiAppsStudio <small>Administration</small></span>
+      </a>
+      <div class="topbar-actions">
+        <button type="button" class="button" data-sign-out hidden>Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+  <main class="shell" id="main" tabindex="-1">
+    <div class="intro">
+      <h1>Administration</h1>
+      <p>Choisis l’application que tu veux gérer.</p>
+    </div>
+    <div class="panel access-panel" data-gate>
+      <p role="status" data-access-status>Vérification de la connexion…</p>
+      <div class="access-actions">
+        <a class="button" href="/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
+        <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
+      </div>
+      <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
+    </div>
+    <p class="message warning" role="alert" data-session-error hidden></p>
+    <div class="application-grid" data-workspace hidden>
+      <section class="application-card routestop" data-route hidden>
+        <div class="app-heading">
+          <img class="app-icon" src="/assets/icon.png" alt="" width="80" height="80">
+          <h2>RouteStop</h2>
+        </div>
+        <p>Aires et services, signalements et suivi de l’application.</p>
+        <a class="button" href="/admin/">Ouvrir RouteStop</a>
+      </section>
+      <section class="application-card podlegacy" data-pod hidden>
+        <div class="app-heading">
+          <img class="app-icon" src="./podlegacy-icon.png" alt="" width="80" height="80">
+          <h2>PodLegacy</h2>
+        </div>
+        <p>Incidents de lecture, versions iPhone et Mac, relevés de téléchargements.</p>
+        <a class="button" href="./podlegacy/">Ouvrir PodLegacy</a>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>PodLegacy · CachiAppsStudio</title>
+  <link rel="icon" type="image/png" href="/assets/cachi-appsstudio-logo-928a21d052bb.png">
+  <link rel="stylesheet" href="../style.css?v=20261125">
+  <script defer src="/admin/config.js"></script>
+  <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
+  <script defer src="../session.js?v=20261125"></script>
+  <script defer src="./workspace.js?v=20261125"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Aller au contenu</a>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="/studio-admin/">
+        <span class="brand-image"><img src="/assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="52" height="42"></span>
+        <span>CachiAppsStudio <small>Administration</small></span>
+      </a>
+      <div class="topbar-actions">
+        <button type="button" class="button" data-sign-out hidden>Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+  <main class="shell" id="main" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Navigation"><a href="/studio-admin/">Toutes les applications</a></nav>
+    <header class="app-banner podlegacy">
+      <img class="app-icon" src="../podlegacy-icon.png" alt="" width="80" height="80">
+      <div><h1>PodLegacy</h1><p>Administration iPhone et Mac</p></div>
+    </header>
+    <div class="panel access-panel" data-gate>
+      <p role="status" data-access-status>Vérification de la connexion…</p>
+      <div class="access-actions">
+        <a class="button" href="/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
+        <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
+      </div>
+      <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
+    </div>
+    <p class="message warning" role="alert" data-session-error hidden></p>
+    <div data-workspace hidden>
+      <nav class="section-nav" aria-label="Gestion PodLegacy">
+        <a href="#signalements">Signalements</a>
+        <a href="#versions">Versions</a>
+        <a href="#telechargements">Téléchargements</a>
+      </nav>
+      <section class="work-section" id="signalements">
+        <div class="section-head"><h2>Signalements</h2></div>
+        <div class="work-grid">
+          <div class="panel">
+            <h3>Suivi des incidents</h3>
+            <p class="helper" data-incidents-status role="status"></p>
+            <ul class="incident-list" data-incidents></ul>
+            <div class="pagination" data-incident-pagination hidden>
+              <button class="button secondary" type="button" data-previous>Précédents</button>
+              <span data-incident-page></span>
+              <button class="button secondary" type="button" data-next>Suivants</button>
+            </div>
+          </div>
+          <div class="panel form-panel">
+            <h3>Ajouter un signalement</h3>
+            <form class="form" data-new-incident>
+              <label>Titre<input name="title" required maxlength="100" placeholder="Ex. Reprise après Podcasts"></label>
+              <div class="form-row">
+                <label>Plateforme
+                  <select name="platform" required>
+                    <option value="ios">iPhone</option>
+                    <option value="mac">Mac</option>
+                    <option value="both">iPhone et Mac</option>
+                  </select>
+                </label>
+                <label>Sujet
+                  <select name="theme" required>
+                    <option value="playback">Lecture et volume</option>
+                    <option value="resume">Reprise de lecture</option>
+                    <option value="access">Accès Apple Music</option>
+                    <option value="interface">Interface et molette</option>
+                    <option value="other">Autre</option>
+                  </select>
+                </label>
+              </div>
+              <label>Version ou build, si connu<input name="build" maxlength="32"></label>
+              <label>Étapes et résultat observé<textarea name="details" required maxlength="1500" rows="4"></textarea></label>
+              <button class="button" type="submit">Ajouter le signalement</button>
+              <p class="message" role="status" hidden></p>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="work-section" id="versions">
+        <div class="section-head">
+          <h2>Versions</h2>
+          <div class="external-links">
+            <a href="https://appstoreconnect.apple.com/apps/6835396893/distribution/ios/version/inflight" target="_blank" rel="noreferrer">App Store Connect</a>
+            <a href="https://appstoreconnect.apple.com/apps/6835396893/testflight/" target="_blank" rel="noreferrer">TestFlight</a>
+          </div>
+        </div>
+        <div class="work-grid">
+          <div class="panel">
+            <h3>Derniers états consignés</h3>
+            <p class="helper" data-releases-status role="status"></p>
+            <ul class="record-list" data-releases></ul>
+          </div>
+          <div class="panel form-panel">
+            <h3>Consigner une version</h3>
+            <p class="helper">Pour modifier le relevé d’une version, conserve sa plateforme, son numéro et son build. La publication se gère dans App Store Connect.</p>
+            <form class="form" data-release>
+              <div class="form-row">
+                <label>Plateforme
+            <select name="platform" required>
+              <option value="ios">iPhone</option>
+              <option value="mac">Mac</option>
+            </select>
+          </label>
+                <label>Date du relevé<input type="date" name="observed_on" required min="2000-01-01"></label>
+              </div>
+              <div class="form-row">
+                <label>Version<input name="version" placeholder="1.0.0" pattern="[0-9]+([.][0-9]+){1,2}" maxlength="18" required></label>
+                <label>Build<input name="build" pattern="[0-9]+([.][0-9]+){0,2}" maxlength="16" required></label>
+              </div>
+              <label>État
+                <select name="state" required>
+                  <option value="testing">En test</option>
+                  <option value="preparing">En préparation</option>
+                  <option value="submitted">Soumise</option>
+                  <option value="published">Publiée</option>
+                  <option value="archived">Archivée</option>
+                </select>
+              </label>
+              <label>Note<textarea name="note" maxlength="500" rows="3"></textarea></label>
+              <button class="button" type="submit">Enregistrer dans le suivi</button>
+              <p class="message" role="status" hidden></p>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="work-section" id="telechargements">
+        <div class="section-head">
+          <h2>Téléchargements</h2>
+          <a href="https://appstoreconnect.apple.com/apps/6835396893/analytics" target="_blank" rel="noreferrer">Analyses Apple</a>
+        </div>
+        <div class="work-grid">
+          <div class="panel">
+            <h3>Derniers relevés</h3>
+            <p class="helper" data-downloads-status role="status">Premiers téléchargements cumulés.</p>
+            <div class="download-grid" data-downloads></div>
+          </div>
+          <div class="panel form-panel">
+            <h3>Saisir un relevé</h3>
+            <p class="helper">Dans Analyses Apple, relève le total depuis le lancement pour la plateforme choisie.</p>
+            <form class="form" data-download>
+              <div class="form-row">
+                <label>Plateforme
+            <select name="platform" required>
+              <option value="ios">iPhone</option>
+              <option value="mac">Mac</option>
+            </select>
+          </label>
+                <label>Date du relevé<input type="date" name="observed_on" required min="2000-01-01"></label>
+              </div>
+              <label>Total cumulé des premiers téléchargements<input type="number" name="first_downloads" min="0" max="999999999" step="1" required></label>
+              <button class="button" type="submit">Enregistrer le relevé</button>
+              <p class="message" role="status" hidden></p>
+            </form>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <template id="incident-template">
+    <li class="incident">
+      <details>
+        <summary>
+          <span class="incident-title">
+            <strong data-title></strong>
+            <span class="detail-line" data-metadata></span>
+          </span>
+          <span class="tag" data-state></span>
+        </summary>
+        <div class="incident-body">
+          <p class="preserve" data-details></p>
+          <form class="form">
+            <label>État
+              <select name="state" required>
+            <option value="open">À analyser</option>
+            <option value="investigating">En cours</option>
+            <option value="resolved">Corrigé</option>
+              </select>
+            </label>
+            <label>Note de suivi<textarea name="resolution" maxlength="500" rows="3"></textarea></label>
+            <button class="button secondary" type="submit">Enregistrer le suivi</button>
+            <p class="message" role="status" hidden></p>
+          </form>
+        </div>
+      </details>
+    </li>
+  </template>
+</body>
+</html>
