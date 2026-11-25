@@ -1,0 +1,75 @@
+/* Signature CachiAppsStudio commune aux sites du studio. */
+.studio-signature {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:16px;
+  max-width:100%;
+  min-width:0;
+}
+.studio-logo-badge {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  padding:10px 14px;
+  border:1px solid #d8dde3;
+  border-radius:12px;
+  background:#fff;
+  color-scheme:light;
+  box-shadow:0 2px 8px #0000000a;
+}
+.studio-logo-badge img {
+  display:block;
+  width:132px;
+  max-width:100%;
+  height:auto;
+  object-fit:contain;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+}
+.studio-signature>.studio-signature-copy {
+  display:block;
+  min-width:0;
+  max-width:220px;
+  font-size:14px;
+  line-height:1.5;
+  color:inherit;
+}
+.studio-signature .studio-signature-kicker {
+  display:block;
+  font-size:14px;
+  opacity:.78;
+}
+.studio-signature .studio-signature-copy strong {
+  display:block;
+  font-size:17px;
+  line-height:1.35;
+  font-weight:700;
+  color:inherit;
+  overflow-wrap:anywhere;
+}
+.site-footer .footer-inner {
+  flex-wrap:wrap;
+}
+.studio-footer-signature-row {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+}
+.studio-footer-signature-row>.footer-legal-copy {
+  min-width:0;
+  margin:0;
+}
+@media(max-width:360px) {
+  .studio-logo-badge {
+    padding:8px 12px;
+  }
+  .studio-logo-badge img {
+    width:116px;
+  }
+}

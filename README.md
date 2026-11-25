@@ -61,3 +61,15 @@ l’administration, avec la raison de la vérification. Une fiche liée à un no
 identifiant mais à une autre autoroute n’est pas fusionnée automatiquement.
 Les erreurs de téléchargement et les dates anciennes restent signalées
 séparément : recevoir des données ne signifie pas avoir validé chaque aire.
+
+## Signature CachiAppsStudio
+
+Les pages publiques d’information (accueil, support, confidentialité et
+suppression du compte) affichent le logo officiel CachiAppsStudio dans leur
+pied de page. Le logo RouteStop et les textes légaux sont conservés.
+
+Le PNG est repris sans modification du master du studio (SHA-256
+`928a21d052bb5729f0164b7a8c79a706e5c832222eb2b3c95aabed351d4d59fb`).
+Une plaque blanche en garantit la lisibilité, quel que soit le thème. La
+signature s’adapte aux petits écrans. Conserver cette signature lors des
+prochaines mises à jour et réutiliser le logo officiel sur les futurs sites.
