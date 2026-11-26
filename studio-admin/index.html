@@ -10,11 +10,12 @@
   <title>CachiAppsStudio · Administration</title>
   <link rel="icon" type="image/png" href="./assets/cachi-appsstudio-logo-928a21d052bb.png">
   <link rel="preload" as="image" href="./identity/brush-symbol.png" fetchpriority="high">
-  <link rel="stylesheet" href="./style.css?v=20261126-ink2">
+  <link rel="stylesheet" href="./style.css?v=20261126-nav">
+  <script src="./intro.js"></script>
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="./session.js?v=20261126-ink2"></script>
-  <script defer src="./home.js?v=20261126"></script>
+  <script defer src="./session.js?v=20261126-nav"></script>
+  <script defer src="./home.js?v=20261126-nav"></script>
 </head>
 <body class="studio-home">
   <a class="skip" href="#main">Aller au contenu</a>
@@ -113,7 +114,7 @@
       </svg>
     </h1>
     <div class="studio-interaction">
-      <section class="access-panel" data-gate aria-labelledby="login-title">
+      <section class="access-panel" data-gate aria-labelledby="login-title" hidden>
         <h2 id="login-title">Connexion</h2>
         <p class="access-status" role="status" data-access-status>Vérification de la connexion…</p>
         <div class="access-actions">
@@ -125,19 +126,19 @@
           <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
           <button class="button" type="submit">Se connecter <span aria-hidden="true">→</span></button>
         </form>
-        <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
       </section>
+      <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
       <p class="message warning access-error" role="alert" data-session-error hidden></p>
       <section class="projects" data-workspace hidden aria-labelledby="projects-title">
         <h2 id="projects-title">Applications</h2>
         <div class="project-index">
-          <a class="project-row route-project" href="https://routestop.fr/admin/" data-route hidden>
+          <a class="project-row route-project" href="./routestop/" data-route hidden>
             <img class="project-icon" src="./assets/icon.png" alt="" width="58" height="58">
             <div class="project-copy">
               <h3>RouteStop</h3>
-              <p>Aires, services et signalements</p>
+              <p>Tableau de bord</p>
             </div>
-            <span class="project-arrow" aria-hidden="true">↗</span>
+            <span class="project-arrow" aria-hidden="true">→</span>
           </a>
           <a class="project-row pod-project" href="./podlegacy/" data-pod hidden>
             <img class="project-icon" src="./podlegacy-icon.png" alt="" width="58" height="58">

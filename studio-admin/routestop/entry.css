@@ -1,0 +1,14 @@
+.studio-back { text-decoration: none; white-space: nowrap; }
+.studio-back:hover { text-decoration: underline; }
+[data-studio-route] #admin-state { display: none; }
+#studio-route-status { margin: 1.5rem 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-studio-route] #app-shell:not(.hidden) {
+    animation: route-entry .32s cubic-bezier(.2, .75, .29, 1) backwards;
+  }
+}
+@keyframes route-entry {
+  from { opacity: 0; transform: translateY(.72rem); }
+  to { opacity: 1; transform: none; }
+}

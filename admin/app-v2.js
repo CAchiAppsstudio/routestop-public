@@ -1,5 +1,6 @@
 (() => {
   const CONFIG_KEY = 'routestop_admin_supabase_v1';
+  const studioEntry = document.documentElement.hasAttribute('data-studio-route');
   const ACTIVE_SYNC_STATUSES = new Set(['requested', 'running']);
   const ACTIVE_RELEASE_STATUSES = new Set([
     'requested', 'checking', 'publishing', 'running', 'waiting_review', 'in_review',
@@ -101,6 +102,8 @@
 
   let client = null;
   let session = null;
+  let studioSessionTimer;
+  let leavingStudioRoute = false;
   let activeView = window.location?.hash === '#aires' ? 'areas' : 'home';
   let statusFilter = 'pending';
   let search = '';
@@ -208,7 +211,7 @@
       return false;
     }
     client = window.supabase.createClient(config.url, config.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: !studioEntry },
     });
     setText('config-state', 'Configuration prête.');
     return true;
@@ -216,7 +219,29 @@
 
   async function boot() {
     bindEvents();
-    if (!initClient()) return;
+    if (!initClient()) {
+      if (studioEntry) showStudioRouteStatus('RouteStop est indisponible. Réessaie dans un instant.');
+      return;
+    }
+    if (studioEntry) {
+      client.auth.onAuthStateChange((_event, nextSession) => receiveStudioSession(nextSession));
+      window.addEventListener('pagehide', event => {
+        if (!event.persisted) return;
+        setHidden('app-shell', true);
+        showStudioRouteStatus('Ouverture du tableau de bord…');
+      });
+      window.addEventListener('pageshow', async event => {
+        if (!event.persisted) return;
+        try {
+          const { data, error } = await client.auth.getSession();
+          if (error) throw error;
+          receiveStudioSession(data.session, true);
+        } catch {
+          showStudioRouteStatus('Impossible de vérifier la connexion. Recharge la page.');
+        }
+      });
+      return;
+    }
     const { data } = await client.auth.getSession();
     session = data.session;
     await renderSession();
@@ -224,6 +249,29 @@
       session = nextSession;
       await renderSession();
     });
+  }
+
+  function showStudioRouteStatus(message) {
+    setText('studio-route-status', message);
+    setHidden('studio-route-status', false);
+  }
+
+  function receiveStudioSession(nextSession, recheck = false) {
+    if (leavingStudioRoute) return;
+    const previousUser = session?.user.id;
+    if (!nextSession || (previousUser && previousUser !== nextSession.user.id)) {
+      leavingStudioRoute = true;
+      session = null;
+      window.clearTimeout(studioSessionTimer);
+      setHidden('app-shell', true);
+      window.location.replace('../');
+      return;
+    }
+    session = nextSession;
+    if (previousUser && !recheck) return;
+    // Run the permission check after Supabase releases its auth callback lock.
+    window.clearTimeout(studioSessionTimer);
+    studioSessionTimer = window.setTimeout(renderSession, 0);
   }
 
   function bindEvents() {
@@ -249,6 +297,12 @@
     });
 
     $('logout-btn').addEventListener('click', async () => {
+      if (studioEntry) {
+        const { error } = await client.auth.signOut({ scope: 'local' });
+        if (error) showFeedback('La déconnexion a échoué. Réessaie dans un instant.');
+        else receiveStudioSession(null);
+        return;
+      }
       unsubscribeRealtime();
       if (client) await client.auth.signOut();
       session = null;
@@ -322,18 +376,25 @@
   }
 
   async function renderSession() {
+    const userId = session?.user.id;
     const email = session?.user?.email;
     setHidden('logout-btn', !session);
     setText('admin-state', email || 'Non connecté');
     $('admin-state').className = session ? 'pill success' : 'pill muted';
     setHidden('app-shell', true);
     setHidden('denied-panel', true);
-    setHidden('auth-panel', !!session);
-    setHidden('setup-panel', !!session || readConfig().managed);
+    setHidden('auth-panel', studioEntry || !!session);
+    setHidden('setup-panel', studioEntry || !!session || readConfig().managed);
     if (!client || !session) return;
 
     const { data, error } = await client.rpc('is_admin');
+    if (studioEntry && (leavingStudioRoute || session?.user.id !== userId)) return;
     if (error || data !== true) {
+      if (studioEntry) {
+        showStudioRouteStatus(error ? 'Impossible de vérifier l’accès à RouteStop. Recharge la page.' :
+          'Ce compte n’a pas accès au tableau de bord RouteStop.');
+        return;
+      }
       setHidden('setup-panel', true);
       setHidden('denied-panel', false);
       $('admin-sql').textContent = error
@@ -342,6 +403,7 @@
       return;
     }
 
+    setHidden('studio-route-status', true);
     setHidden('app-shell', false);
     subscribeRealtime();
     startActivePoll();

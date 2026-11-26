@@ -12,15 +12,17 @@ séparé.
 ## Administration CachiAppsStudio
 
 Le portail [CachiAppsStudio](https://admin.cachiappsstudio.fr/) permet de
-se connecter avec le compte administrateur RouteStop. Il ouvre l’administration
-existante de RouteStop et l’espace PodLegacy pour les incidents, versions et
-téléchargements. L’entrée sur [routestop.fr](https://routestop.fr/studio-admin/)
-peut aussi reprendre la session de connexion de RouteStop.
+se connecter avec le compte administrateur RouteStop. Sur le domaine du studio,
+la session ouvre directement le tableau de bord sous `/routestop/` et donne
+accès à PodLegacy selon les habilitations du compte. L’entrée hébergée sur
+[routestop.fr](https://routestop.fr/studio-admin/) reprend la session de ce
+domaine et ouvre le tableau de bord sous `/admin/`.
 
 Le site autonome est déployé sur Netlify. Pour préparer les fichiers à partir
 du commit courant, exécuter
 `python3 .github/studio-admin/build-site.py /chemin/vers/un-nouveau-dossier`.
-Le domaine `admin.cachiappsstudio.fr` autorise le formulaire de connexion.
+La compilation inclut le tableau de bord RouteStop depuis les sources
+`admin/` du même commit.
 
 La page utilise le projet Supabase de RouteStop. L’autorisation RouteStop
 reste gérée par son administration. Pour PodLegacy, l’accès est accordé

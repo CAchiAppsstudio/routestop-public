@@ -9,11 +9,11 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>PodLegacy · CachiAppsStudio</title>
   <link rel="icon" type="image/png" href="../assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="../style.css?v=20261126-ink2">
+  <link rel="stylesheet" href="../style.css?v=20261126-nav">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="../session.js?v=20261126-ink2"></script>
-  <script defer src="./workspace.js?v=20261126"></script>
+  <script defer src="../session.js?v=20261126-nav"></script>
+  <script defer src="./workspace.js?v=20261126-nav"></script>
 </head>
 <body class="pod-workspace">
   <a class="skip" href="#main">Aller au contenu</a>
@@ -29,12 +29,12 @@
     </div>
   </header>
   <main class="shell" id="main" tabindex="-1">
-    <nav class="breadcrumb" aria-label="Navigation"><a href="../">Toutes les applications</a></nav>
+    <nav class="breadcrumb" aria-label="Navigation"><a href="../">← Accueil du studio</a></nav>
     <header class="app-banner podlegacy">
       <img class="app-icon" src="../podlegacy-icon.png" alt="" width="80" height="80">
-      <div><h1>PodLegacy</h1><p>Administration iPhone et Mac</p></div>
+      <h1>PodLegacy</h1>
     </header>
-    <div class="access-panel" data-gate>
+    <div class="access-panel" data-gate hidden>
       <h2>Connexion</h2>
       <p class="access-status" role="status" data-access-status>Vérification de la connexion…</p>
       <div class="access-actions">
@@ -46,12 +46,12 @@
         <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
         <button class="button" type="submit">Se connecter <span aria-hidden="true">→</span></button>
       </form>
-      <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
     </div>
+    <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
     <p class="message warning" role="alert" data-session-error hidden></p>
     <div data-workspace hidden>
-      <nav class="section-nav" aria-label="Gestion PodLegacy">
-        <a href="#signalements">Signalements</a>
+      <nav class="section-nav" aria-label="Rubriques de PodLegacy">
+        <a href="#signalements" aria-current="location">Signalements</a>
         <a href="#versions">Versions</a>
         <a href="#telechargements">Téléchargements</a>
       </nav>
@@ -59,7 +59,7 @@
         <div class="section-head"><h2>Signalements</h2></div>
         <div class="work-grid">
           <div class="panel">
-            <h3>Suivi des incidents</h3>
+            <h3>Signalements enregistrés</h3>
             <p class="helper" data-incidents-status role="status"></p>
             <ul class="incident-list" data-incidents></ul>
             <div class="pagination" data-incident-pagination hidden>
@@ -68,8 +68,8 @@
               <button class="button secondary" type="button" data-next>Suivants</button>
             </div>
           </div>
-          <div class="panel form-panel">
-            <h3>Ajouter un signalement</h3>
+          <details class="form-panel">
+            <summary>Ajouter un signalement</summary>
             <form class="form" data-new-incident>
               <label>Titre<input name="title" required maxlength="100" placeholder="Ex. Reprise après Podcasts"></label>
               <div class="form-row">
@@ -95,11 +95,11 @@
               <button class="button" type="submit">Ajouter le signalement</button>
               <p class="message" role="status" hidden></p>
             </form>
-          </div>
+          </details>
         </div>
       </section>
 
-      <section class="work-section" id="versions">
+      <section class="work-section" id="versions" hidden>
         <div class="section-head">
           <h2>Versions</h2>
           <div class="external-links">
@@ -109,12 +109,12 @@
         </div>
         <div class="work-grid">
           <div class="panel">
-            <h3>Derniers états consignés</h3>
+            <h3>Versions consignées</h3>
             <p class="helper" data-releases-status role="status"></p>
             <ul class="record-list" data-releases></ul>
           </div>
-          <div class="panel form-panel">
-            <h3>Consigner une version</h3>
+          <details class="form-panel">
+            <summary>Consigner une version</summary>
             <p class="helper">Pour modifier le relevé d’une version, conserve sa plateforme, son numéro et son build. La publication se gère dans App Store Connect.</p>
             <form class="form" data-release>
               <div class="form-row">
@@ -143,24 +143,24 @@
               <button class="button" type="submit">Enregistrer dans le suivi</button>
               <p class="message" role="status" hidden></p>
             </form>
-          </div>
+          </details>
         </div>
       </section>
 
-      <section class="work-section" id="telechargements">
+      <section class="work-section" id="telechargements" hidden>
         <div class="section-head">
           <h2>Téléchargements</h2>
-          <a href="https://appstoreconnect.apple.com/apps/6835396893/analytics" target="_blank" rel="noreferrer">Analyses Apple</a>
+          <a href="https://appstoreconnect.apple.com/apps/6835396893/analytics" target="_blank" rel="noreferrer">Analyses App Store Connect</a>
         </div>
         <div class="work-grid">
           <div class="panel">
             <h3>Derniers relevés</h3>
-            <p class="helper" data-downloads-status role="status">Premiers téléchargements cumulés.</p>
-            <div class="download-grid" data-downloads></div>
+            <p class="helper" data-downloads-status role="status"></p>
+            <ul class="download-list" data-downloads></ul>
           </div>
-          <div class="panel form-panel">
-            <h3>Saisir un relevé</h3>
-            <p class="helper">Dans Analyses Apple, relève le total depuis le lancement pour la plateforme choisie.</p>
+          <details class="form-panel">
+            <summary>Saisir un relevé</summary>
+            <p class="helper">Saisis le total cumulé indiqué dans App Store Connect.</p>
             <form class="form" data-download>
               <div class="form-row">
                 <label>Plateforme
@@ -175,7 +175,7 @@
               <button class="button" type="submit">Enregistrer le relevé</button>
               <p class="message" role="status" hidden></p>
             </form>
-          </div>
+          </details>
         </div>
       </section>
     </div>

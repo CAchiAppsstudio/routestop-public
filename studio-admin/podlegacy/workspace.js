@@ -3,7 +3,7 @@
   const select = (selector, root = document) => root.querySelector(selector);
   const incidentList = select("[data-incidents]");
   const releaseList = select("[data-releases]");
-  const downloadGrid = select("[data-downloads]");
+  const downloadList = select("[data-downloads]");
   const incidentStatus = select("[data-incidents-status]");
   const releaseStatus = select("[data-releases-status]");
   const downloadStatus = select("[data-downloads-status]");
@@ -14,6 +14,10 @@
   const releaseForm = select("[data-release]");
   const downloadForm = select("[data-download]");
   const incidentTemplate = select("#incident-template");
+  const navigation = select(".section-nav");
+  const sections = [...navigation.querySelectorAll("a")].map(link => ({
+    link, panel: document.getElementById(link.hash.slice(1)),
+  }));
   const requests = new WeakMap();
   const pageSize = 10;
   const platformNames = { ios: "iPhone", mac: "Mac", both: "iPhone et Mac" };
@@ -44,6 +48,27 @@
   function formatDate(value) {
     return dateFormat.format(new Date(value));
   }
+
+  function showSection() {
+    if (window.location.hash === "#main") return;
+    const current = sections.find(({ link }) => link.hash === window.location.hash) ?? sections[0];
+    for (const section of sections) {
+      section.panel.hidden = section !== current;
+      if (section === current) section.link.setAttribute("aria-current", "location");
+      else section.link.removeAttribute("aria-current");
+    }
+  }
+
+  navigation.addEventListener("click", event => {
+    const link = event.target.closest("a");
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (link.hash !== window.location.hash) history.pushState(null, "", link.hash);
+    showSection();
+  });
+  window.addEventListener("hashchange", showSection);
+  window.addEventListener("popstate", showSection);
+  showSection();
 
   function formFeedback(form, message = "", state = "") {
     const status = select("[role=status]", form);
@@ -204,30 +229,30 @@
         .select("observed_on,first_downloads").eq("owner_id", ownerId).eq("platform", platform)
         .order("observed_on", { ascending: false }).limit(6)),
       render(result) {
-        downloadStatus.textContent = "Premiers téléchargements cumulés.";
-        downloadGrid.replaceChildren(...Object.entries(result).map(([platform, records]) => {
-          const box = element("div", "", "download-box");
-          box.append(element("strong", platformNames[platform]));
+        downloadStatus.textContent = "Relevés manuels d’App Store Connect.";
+        downloadList.replaceChildren(...Object.entries(result).map(([platform, records]) => {
+          const row = element("li");
+          const header = element("div", "", "record-header");
+          header.append(element("strong", platformNames[platform]));
+          row.append(header);
           const [latest, ...history] = records;
           if (!latest) {
-            box.append(element("span", "Aucun relevé", "detail-line"));
-            return box;
+            header.append(element("span", "Aucun relevé", "detail-line"));
+            return row;
           }
 
-          box.append(
-            element("strong", numberFormat.format(latest.first_downloads), "download-number"),
-            element("span", "Au " + formatDate(latest.observed_on), "detail-line"),
-          );
+          header.append(element("strong", numberFormat.format(latest.first_downloads)));
+          row.append(element("span", "Relevé du " + formatDate(latest.observed_on), "detail-line"));
           if (history.length) {
             const list = element("ul");
             const details = element("details", "", "download-history");
             for (const record of history) {
               list.append(element("li", formatDate(record.observed_on) + " · " + numberFormat.format(record.first_downloads)));
             }
-            details.append(element("summary", "Précédents relevés"), list);
-            box.append(details);
+            details.append(element("summary", "Historique"), list);
+            row.append(details);
           }
-          return box;
+          return row;
         }));
       },
       failure: "Impossible de charger les relevés. Actualise la page pour réessayer.",
@@ -261,7 +286,7 @@
       if (account?.id === access?.userId) return;
       account = access ? { id: access.userId } : null;
       unsavedIncidentId = null;
-      for (const container of [incidentList, releaseList, downloadGrid]) container.replaceChildren();
+      for (const container of [incidentList, releaseList, downloadList]) container.replaceChildren();
       for (const status of [incidentStatus, releaseStatus, downloadStatus]) status.textContent = "";
       pager.hidden = true;
       for (const form of [newIncident, releaseForm, downloadForm]) {

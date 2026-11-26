@@ -27,10 +27,10 @@
       warning.hidden = !message;
     }
 
-    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false }) {
+    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false, pending = false }) {
       const previousId = access?.userId;
       access = granted;
-      gate.hidden = Boolean(granted);
+      gate.hidden = Boolean(granted) || pending;
       workspace.hidden = !granted;
       status.textContent = message;
       connect.hidden = !canConnect || hosted;
@@ -164,7 +164,7 @@
       if (access?.userId === nextId && nextId) return;
       if (access) {
         revision++;
-        render({ message: "Vérification de la connexion…" });
+        render({ pending: true });
       }
       // Supabase locks its session during the callback. Start requests afterwards.
       scheduleRefresh();
@@ -177,7 +177,7 @@
       revision++;
       clearTimeout(timer);
       showWarning();
-      render({ message: "Vérification de la connexion…" });
+      render({ pending: true });
     });
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) scheduleRefresh();
