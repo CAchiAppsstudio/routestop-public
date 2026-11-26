@@ -92,6 +92,7 @@ a.quiet-button { display: inline-flex; align-items: center; }
   --studio-width: min(calc(100vw - 5rem), 71rem);
   --ink-travel-x: calc(var(--studio-width) / 4);
   --ink-travel-y: -2.2rem;
+  --ink-intro-scale: 1.55;
   width: var(--studio-width);
   min-height: calc(100svh - 4.4rem);
   display: grid;
@@ -212,7 +213,7 @@ a.quiet-button { display: inline-flex; align-items: center; }
   to { opacity: 1; }
 }
 @keyframes ink-dock {
-  from { transform: translate(var(--ink-travel-x), var(--ink-travel-y)) scale(1.14); }
+  from { transform: translate(var(--ink-travel-x), var(--ink-travel-y)) scale(var(--ink-intro-scale)); }
   to { transform: none; }
 }
 @keyframes studio-enter {
@@ -412,6 +413,7 @@ button:disabled { opacity: .57; cursor: default; }
     --studio-width: calc(100vw - 2.25rem);
     --ink-mobile-width: clamp(9.5rem, 32vw, 13rem);
     --ink-mobile-padding: clamp(1.55rem, 4vh, 2.75rem);
+    --ink-intro-scale: 1.47;
     --ink-travel-x: 0px;
     --ink-travel-y: max(0px, calc(50svh - 3.8rem - var(--ink-mobile-padding) - var(--ink-mobile-width) * .32));
     grid-template-columns: minmax(0, 1fr);
@@ -438,6 +440,9 @@ button:disabled { opacity: .57; cursor: default; }
   .form-row { grid-template-columns: minmax(0, 1fr); }
   .incident summary { flex-wrap: wrap; }
   .project-row { min-height: 5.4rem; }
+}
+@media (max-height: 30rem) {
+  .studio-layout { --ink-intro-scale: 1.2; }
 }
 @media (prefers-reduced-motion: reduce) {
   .button, .project-row, .project-arrow, .signin-form .button span { transition: none; }

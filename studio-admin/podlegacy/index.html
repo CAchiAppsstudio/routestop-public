@@ -9,10 +9,10 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>PodLegacy · CachiAppsStudio</title>
   <link rel="icon" type="image/png" href="../assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="../style.css?v=20261126-security">
+  <link rel="stylesheet" href="../style.css?v=20261126-mfa">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="../session.js?v=20261126-security"></script>
+  <script defer src="../session.js?v=20261126-mfa"></script>
   <script defer src="./workspace.js?v=20261126-nav"></script>
 </head>
 <body class="pod-workspace">
@@ -41,6 +41,7 @@
       <div class="access-actions">
         <a class="button" href="https://routestop.fr/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
         <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
+        <a class="button" href="https://admin.cachiappsstudio.fr/securite/" data-enroll-link hidden>Configurer le code</a>
       </div>
       <form class="form signin-form" method="post" data-login hidden>
         <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>

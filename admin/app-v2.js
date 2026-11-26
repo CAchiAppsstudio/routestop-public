@@ -394,9 +394,9 @@
 
     if (studioEntry) {
       try {
-        const needsMfa = await window.StudioAdmin.requiresMfa();
+        const { currentLevel } = await window.StudioAdmin.mfaLevels();
         if (leavingStudioRoute || session?.user.id !== userId) return;
-        if (needsMfa) {
+        if (currentLevel !== 'aal2') {
           leavingStudioRoute = true;
           window.location.replace('../?ouvrir=routestop');
           return;

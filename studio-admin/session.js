@@ -8,10 +8,10 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   }) : null;
 
-  async function requiresMfa() {
+  async function mfaLevels() {
     const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
     if (error) throw error;
-    return data.currentLevel !== "aal2" && data.nextLevel === "aal2";
+    return data;
   }
 
   async function confirmPassword(userId, password) {
@@ -62,7 +62,7 @@
     return { form, factorLabel, factor, code, button };
   }
 
-  function mount({ home = false, onAccess }) {
+  function mount({ home = false, allowEnrollment = false, onAccess }) {
     const gate = document.querySelector("[data-gate]");
     const status = document.querySelector("[data-access-status]");
     const connect = document.querySelector("[data-connect]");
@@ -74,6 +74,7 @@
     const warning = document.querySelector("[data-session-error]");
     const workspace = document.querySelector("[data-workspace]");
     const security = document.querySelector("[data-security]");
+    const enrollLink = document.querySelector("[data-enroll-link]");
     let access = null;
     let revision = 0;
     let timer;
@@ -83,7 +84,7 @@
       warning.hidden = !message;
     }
 
-    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false, pending = false, factors = [] }) {
+    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false, pending = false, factors = [], canEnroll = false }) {
       const previousId = access?.userId;
       access = granted;
       gate.hidden = Boolean(granted) || pending;
@@ -95,6 +96,7 @@
       retry.hidden = !canRetry;
       signOut.hidden = !signedIn;
       if (security) security.hidden = !granted || !hosted;
+      if (enrollLink) enrollLink.hidden = !canEnroll;
       mfa.form.hidden = !factors.length;
       if (factors.length) {
         const previous = mfa.factor.value;
@@ -140,9 +142,10 @@
         }
 
         signedIn = true;
-        const needsMfa = await requiresMfa();
+        const userId = session.user.id;
+        const { currentLevel, nextLevel } = await mfaLevels();
         if (request !== revision) return;
-        if (needsMfa) {
+        if (currentLevel !== "aal2" && nextLevel === "aal2") {
           const { data, error } = await client.auth.mfa.listFactors();
           if (request !== revision) return;
           if (error) throw error;
@@ -153,8 +156,26 @@
           });
           return;
         }
+        if (currentLevel !== "aal2") {
+          const [pod, route] = await Promise.all([
+            client.from("studio_podlegacy_admins").select("user_id").eq("user_id", userId).maybeSingle(),
+            client.from("admin_users").select("id").eq("id", userId).maybeSingle(),
+          ]);
+          if (request !== revision) return;
+          if (pod.error || route.error) throw pod.error ?? route.error;
+          const eligible = Boolean(pod.data || route.data);
+          if (eligible && allowEnrollment) {
+            render({ granted: { userId, enrollmentOnly: true }, signedIn: true });
+          } else {
+            render({
+              signedIn: true, canEnroll: eligible,
+              message: eligible ? "Configure la double authentification pour ouvrir l’administration." :
+                "Ce compte n’a pas accès à cet espace d’administration.",
+            });
+          }
+          return;
+        }
 
-        const userId = session.user.id;
         const [pod, route] = await Promise.all([
           client.from("studio_podlegacy_admins").select("user_id").eq("user_id", userId).maybeSingle(),
           home ? client.rpc("is_admin") : Promise.resolve({ data: false }),
@@ -296,5 +317,5 @@
     });
   }
 
-  window.StudioAdmin = { client, mount, requiresMfa, confirmPassword };
+  window.StudioAdmin = { client, mount, mfaLevels, confirmPassword };
 })();

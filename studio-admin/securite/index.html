@@ -9,11 +9,11 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>Sécurité · CachiAppsStudio</title>
   <link rel="icon" type="image/png" href="../assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="../style.css?v=20261126-security">
+  <link rel="stylesheet" href="../style.css?v=20261126-mfa">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="../session.js?v=20261126-security"></script>
-  <script defer src="./security.js"></script>
+  <script defer src="../session.js?v=20261126-mfa"></script>
+  <script defer src="./security.js?v=20261126-mfa"></script>
 </head>
 <body class="security-page">
   <a class="skip" href="#main">Aller au contenu</a>
@@ -68,7 +68,7 @@
         </div>
         <p class="message" role="status" data-factor-message hidden></p>
       </section>
-      <section class="security-section" aria-labelledby="password-title">
+      <section class="security-section" aria-labelledby="password-title" data-password-section hidden>
         <h2 id="password-title">Mot de passe</h2>
         <form class="form" method="post" data-change-password>
           <label>Mot de passe actuel<input type="password" name="current" autocomplete="current-password" required></label>

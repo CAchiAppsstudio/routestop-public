@@ -52,9 +52,9 @@ def studio_routestop(page: str) -> str:
         'src="./config.js"': 'src="../admin/config.js"',
         'src="./vendor/supabase-js-2.105.1.js"></script>': (
             'src="../admin/vendor/supabase-js-2.105.1.js"></script>\n'
-            '    <script src="../session.js?v=20261126-security"></script>'
+            '    <script src="../session.js?v=20261126-mfa"></script>'
         ),
-        './app-v2.js?v=20261124-source-recovery': './app-v2.js?v=20261126-security',
+        './app-v2.js?v=20261124-source-recovery': './app-v2.js?v=20261126-mfa',
     }
     for original, studio in additions.items():
         if page.count(original) != 1:

@@ -12,6 +12,7 @@
   const activate = enrollmentForm.querySelector('button[type="submit"]');
   const cancel = select("[data-cancel-factor]");
   const passwordForm = select("[data-change-password]");
+  const passwordSection = select("[data-password-section]");
   const change = passwordForm.querySelector('button[type="submit"]');
   const passwordMessage = select("[data-password-message]");
   const nonceLabel = select("[data-password-nonce]");
@@ -178,7 +179,7 @@
 
   passwordForm.addEventListener("submit", async event => {
     event.preventDefault();
-    if (!account || operation) return;
+    if (!account || account.enrollmentOnly || operation) return;
     const current = passwordForm.elements.namedItem("current");
     const next = passwordForm.elements.namedItem("next");
     const confirm = passwordForm.elements.namedItem("confirm");
@@ -251,9 +252,12 @@
 
   mount({
     home: true,
+    allowEnrollment: true,
     onAccess(access) {
-      if (account?.userId === access?.userId) return;
-      account = access ? { userId: access.userId } : null;
+      const enrollmentOnly = Boolean(access?.enrollmentOnly);
+      passwordSection.hidden = !access || enrollmentOnly;
+      if (account?.userId === access?.userId && account?.enrollmentOnly === enrollmentOnly) return;
+      account = access ? { userId: access.userId, enrollmentOnly } : null;
       resetForms();
       if (account) refreshFactors(account);
     },
