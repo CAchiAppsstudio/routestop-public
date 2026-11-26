@@ -101,6 +101,9 @@
 
   let client = null;
   let session = null;
+  let sessionSubscription;
+  let sessionTimer;
+  let sessionRevision = 0;
   let activeView = window.location?.hash === '#aires' ? 'areas' : 'home';
   let statusFilter = 'pending';
   let search = '';
@@ -214,46 +217,92 @@
     return true;
   }
 
-  async function boot() {
+  function boot() {
     bindEvents();
-    if (!initClient()) return;
-    const { data } = await client.auth.getSession();
-    session = data.session;
-    await renderSession();
-    client.auth.onAuthStateChange(async (_event, nextSession) => {
+    if (initClient()) observeSession();
+  }
+
+  function observeSession() {
+    sessionSubscription?.unsubscribe();
+    const { data } = client.auth.onAuthStateChange((_event, nextSession) => {
+      const previousUser = session?.user.id;
       session = nextSession;
-      await renderSession();
+      const request = ++sessionRevision;
+      // Leave the auth callback before making further Supabase requests.
+      window.clearTimeout(sessionTimer);
+      sessionTimer = window.setTimeout(() => {
+        if (!session || (previousUser && previousUser !== session.user.id)) {
+          unsubscribeRealtime();
+          clearState();
+        }
+        renderSession(request);
+      }, 0);
     });
+    sessionSubscription = data.subscription;
   }
 
   function bindEvents() {
-    $('config-form').addEventListener('submit', async (event) => {
+    $('config-form').addEventListener('submit', (event) => {
       event.preventDefault();
       saveConfig({
         url: $('supabase-url').value.trim(),
         anonKey: $('supabase-key').value.trim(),
       });
-      initClient();
-      await renderSession();
+      if (initClient()) observeSession();
     });
 
     $('auth-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!client && !initClient()) return;
+      if (!client) {
+        if (!initClient()) return;
+        observeSession();
+      }
       setText('auth-state', 'Connexion en cours…');
-      const { error } = await client.auth.signInWithPassword({
-        email: $('email').value.trim(),
-        password: $('password').value,
-      });
-      setText('auth-state', error ? error.message : '');
+      try {
+        const { error } = await client.auth.signInWithPassword({
+          email: $('email').value.trim(),
+          password: $('password').value,
+        });
+        setText('auth-state', error ? 'Adresse e-mail ou mot de passe incorrect.' : '');
+      } catch {
+        setText('auth-state', 'Impossible de te connecter. Réessaie.');
+      } finally {
+        $('password').value = '';
+      }
+    });
+
+    $('mfa-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = $('mfa-submit');
+      const factorId = $('mfa-factor').value;
+      const input = $('mfa-code');
+      const code = input.value;
+      if (!session || button.disabled || !factorId || !/^[0-9]{6}$/.test(code)) return;
+      const userId = session.user.id;
+      button.disabled = true;
+      input.value = '';
+      setText('mfa-state', 'Vérification du code…');
+      try {
+        const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
+        if (error) throw error;
+      } catch {
+        if (session?.user.id === userId) {
+          setText('mfa-state', 'Code refusé. Essaie avec le nouveau code de ton application.');
+          input.focus();
+        }
+      } finally {
+        button.disabled = false;
+      }
     });
 
     $('logout-btn').addEventListener('click', async () => {
-      unsubscribeRealtime();
-      if (client) await client.auth.signOut();
-      session = null;
-      clearState();
-      await renderSession();
+      if (!client) return;
+      const { error } = await client.auth.signOut();
+      if (error) {
+        const message = 'La déconnexion a échoué. Réessaie.';
+        if ($('mfa-panel').classList.contains('hidden')) showFeedback(message);
+        else setText('mfa-state', message);
+      }
     });
 
     $('refresh-btn').addEventListener('click', () => loadView(activeView, true));
@@ -321,18 +370,56 @@
     state.loading.clear();
   }
 
-  async function renderSession() {
+  async function renderSession(request) {
     const email = session?.user?.email;
     setHidden('logout-btn', !session);
     setText('admin-state', email || 'Non connecté');
     $('admin-state').className = session ? 'pill success' : 'pill muted';
     setHidden('app-shell', true);
+    setHidden('mfa-panel', true);
+    setHidden('mfa-setup', true);
+    setHidden('mfa-form', true);
     setHidden('denied-panel', true);
     setHidden('auth-panel', !!session);
     setHidden('setup-panel', !!session || readConfig().managed);
     if (!client || !session) return;
 
+    try {
+      const { data: levels, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (request !== sessionRevision) return;
+      if (error) throw error;
+      if (levels.currentLevel !== 'aal2') {
+        setHidden('mfa-panel', false);
+        if (levels.nextLevel !== 'aal2') {
+          setText('mfa-state', 'Configure la double authentification pour ouvrir le tableau de bord.');
+          setHidden('mfa-setup', false);
+          return;
+        }
+        const { data: factors, error: factorError } = await client.auth.mfa.listFactors();
+        if (request !== sessionRevision) return;
+        if (factorError) throw factorError;
+        const active = factors.totp;
+        if (!active.length) {
+          setText('mfa-state', 'Aucune application d’authentification disponible pour ce compte.');
+          return;
+        }
+        $('mfa-factor').replaceChildren(...active.map((factor, index) =>
+          new Option(factor.friendly_name || `Application ${index + 1}`, factor.id)));
+        setHidden('mfa-factor-label', active.length < 2);
+        setHidden('mfa-form', false);
+        setText('mfa-state', '');
+        return;
+      }
+    } catch {
+      if (request === sessionRevision) {
+        setHidden('mfa-panel', false);
+        setText('mfa-state', 'Impossible de vérifier la connexion. Recharge la page.');
+      }
+      return;
+    }
+
     const { data, error } = await client.rpc('is_admin');
+    if (request !== sessionRevision) return;
     if (error || data !== true) {
       setHidden('setup-panel', true);
       setHidden('denied-panel', false);

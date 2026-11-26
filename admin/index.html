@@ -74,6 +74,19 @@
         </form>
       </section>
 
+      <section id="mfa-panel" class="panel hidden">
+        <div class="panel-head">
+          <h2>Double authentification</h2>
+        </div>
+        <p id="mfa-state" class="hint" role="status"></p>
+        <a id="mfa-setup" class="ghost hidden" href="https://admin.cachiappsstudio.fr/securite/">Configurer le code dans le studio</a>
+        <form id="mfa-form" class="form hidden" method="post">
+          <label id="mfa-factor-label">Application d’authentification<select id="mfa-factor"></select></label>
+          <label>Code à six chiffres<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required /></label>
+          <button id="mfa-submit" type="submit">Vérifier le code</button>
+        </form>
+      </section>
+
       <section id="denied-panel" class="panel hidden wide">
         <div class="panel-head">
           <div>
@@ -148,6 +161,6 @@
     <script src="./vendor/supabase-js-2.105.1.js"></script>
     <script src="./area-review-data.js?v=20261027-aires"></script>
     <script src="./area-review.js?v=20261107-dashboard-actions"></script>
-  <script src="./app-v2.js?v=20261124-source-recovery"></script>
+  <script src="./app-v2.js?v=20261126-mfa"></script>
   </body>
 </html>
