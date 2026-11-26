@@ -8,16 +8,72 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   }) : null;
 
+  async function requiresMfa() {
+    const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) throw error;
+    return data.currentLevel !== "aal2" && data.nextLevel === "aal2";
+  }
+
+  async function confirmPassword(userId, password) {
+    const { data: { user }, error } = await client.auth.getUser();
+    if (error) throw error;
+    if (user?.id !== userId || !user.email) throw new Error("session_changed");
+    // Check with the provider in an isolated session so the active MFA session is retained.
+    const verifier = window.supabase.createClient(config.url, config.anonKey, {
+      auth: {
+        storageKey: "cachi-studio-password-verification",
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+    const { data, error: signInError } = await verifier.auth.signInWithPassword({ email: user.email, password });
+    if (signInError) throw signInError;
+    const { error: signOutError } = await verifier.auth.signOut({ scope: "local" });
+    if (signOutError) throw signOutError;
+    if (data.user?.id !== userId) throw new Error("session_changed");
+  }
+
+  function makeMfaForm(login) {
+    const form = document.createElement("form");
+    form.className = "form signin-form";
+    form.dataset.mfaForm = "";
+    form.method = "post";
+    form.hidden = true;
+
+    const factorLabel = document.createElement("label");
+    const factor = document.createElement("select");
+    factor.name = "factor";
+    factorLabel.append("Application d’authentification", factor);
+
+    const label = document.createElement("label");
+    const code = document.createElement("input");
+    Object.assign(code, {
+      name: "code", inputMode: "numeric", autocomplete: "one-time-code",
+      maxLength: 6, pattern: "[0-9]{6}", required: true,
+    });
+    label.append("Code à six chiffres", code);
+    const button = document.createElement("button");
+    button.className = "button";
+    button.type = "submit";
+    button.textContent = "Vérifier le code";
+    form.append(factorLabel, label, button);
+    login.after(form);
+    return { form, factorLabel, factor, code, button };
+  }
+
   function mount({ home = false, onAccess }) {
     const gate = document.querySelector("[data-gate]");
     const status = document.querySelector("[data-access-status]");
     const connect = document.querySelector("[data-connect]");
     const retry = document.querySelector("[data-refresh-access]");
     const login = document.querySelector("[data-login]");
+    const mfa = makeMfaForm(login);
     const signIn = login.querySelector('button[type="submit"]');
     const signOut = document.querySelector("[data-sign-out]");
     const warning = document.querySelector("[data-session-error]");
     const workspace = document.querySelector("[data-workspace]");
+    const security = document.querySelector("[data-security]");
     let access = null;
     let revision = 0;
     let timer;
@@ -27,7 +83,7 @@
       warning.hidden = !message;
     }
 
-    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false, pending = false }) {
+    function render({ granted = null, message = "", canConnect = false, canRetry = false, signedIn = false, pending = false, factors = [] }) {
       const previousId = access?.userId;
       access = granted;
       gate.hidden = Boolean(granted) || pending;
@@ -38,6 +94,18 @@
       if (login.hidden) login.reset();
       retry.hidden = !canRetry;
       signOut.hidden = !signedIn;
+      if (security) security.hidden = !granted || !hosted;
+      mfa.form.hidden = !factors.length;
+      if (factors.length) {
+        const previous = mfa.factor.value;
+        mfa.factor.replaceChildren(...factors.map((factor, index) =>
+          new Option(factor.friendly_name || "Application " + (index + 1), factor.id)));
+        if (factors.some(factor => factor.id === previous)) mfa.factor.value = previous;
+        mfa.factorLabel.hidden = factors.length < 2;
+      } else {
+        mfa.code.value = "";
+        mfa.factor.replaceChildren();
+      }
       onAccess(granted, previousId);
     }
 
@@ -59,6 +127,7 @@
       }
 
       const request = ++revision;
+      let signedIn = false;
       retry.disabled = true;
       showWarning();
       try {
@@ -67,6 +136,21 @@
         if (error) throw error;
         if (!session) {
           showSignedOut();
+          return;
+        }
+
+        signedIn = true;
+        const needsMfa = await requiresMfa();
+        if (request !== revision) return;
+        if (needsMfa) {
+          const { data, error } = await client.auth.mfa.listFactors();
+          if (request !== revision) return;
+          if (error) throw error;
+          const factors = data.totp ?? [];
+          render({
+            signedIn: true, factors, canRetry: !factors.length,
+            message: factors.length ? "" : "Aucune application d’authentification disponible pour ce compte.",
+          });
           return;
         }
 
@@ -92,7 +176,7 @@
         }
       } catch {
         if (request === revision) {
-          render({ message: "Impossible de vérifier la connexion. Réessaie dans un instant.", canRetry: true });
+          render({ message: "Impossible de vérifier la connexion. Réessaie dans un instant.", canRetry: true, signedIn });
         }
       } finally {
         if (request === revision) retry.disabled = false;
@@ -133,6 +217,31 @@
       }
     });
 
+    mfa.form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (mfa.form.hidden || mfa.button.disabled) return;
+      const factorId = mfa.factor.value;
+      const code = mfa.code.value;
+      if (!factorId || !/^[0-9]{6}$/.test(code)) return;
+      mfa.code.value = "";
+      mfa.button.disabled = true;
+      showWarning();
+      status.textContent = "Vérification du code…";
+      try {
+        const { error } = await client.auth.mfa.challengeAndVerify({ factorId, code });
+        if (error) throw error;
+        scheduleRefresh();
+      } catch {
+        if (!mfa.form.hidden) {
+          status.textContent = "";
+          showWarning("Code refusé. Essaie avec le nouveau code affiché par ton application.");
+          mfa.code.focus();
+        }
+      } finally {
+        mfa.button.disabled = false;
+      }
+    });
+
     retry.addEventListener("click", refresh);
     signOut.addEventListener("click", async () => {
       signOut.disabled = true;
@@ -161,7 +270,10 @@
         return;
       }
       const nextId = session?.user.id;
-      if (access?.userId === nextId && nextId) return;
+      if (access?.userId === nextId && nextId) {
+        if (event === "MFA_CHALLENGE_VERIFIED") scheduleRefresh();
+        return;
+      }
       if (access) {
         revision++;
         render({ pending: true });
@@ -184,5 +296,5 @@
     });
   }
 
-  window.StudioAdmin = { client, mount };
+  window.StudioAdmin = { client, mount, requiresMfa, confirmPassword };
 })();

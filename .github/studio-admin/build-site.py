@@ -26,6 +26,7 @@ HEADERS = """/*
 """
 SUPABASE = "ubvvtmrnczqgoiavijfp.supabase.co"
 STUDIO_CSP = f"default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://{SUPABASE}; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+SECURITY_CSP = STUDIO_CSP.replace("img-src 'self';", "img-src 'self' data:;")
 ROUTESTOP_CSP = f"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://{SUPABASE} wss://{SUPABASE}; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 
@@ -39,7 +40,8 @@ def studio_routestop(page: str) -> str:
         '  </head>': '    <link rel="stylesheet" href="./entry.css" />\n  </head>',
         '      <div class="top-actions">': (
             '      <div class="top-actions">\n'
-            '        <a class="ghost studio-back" href="../">← Accueil du studio</a>'
+            '        <a class="ghost studio-back" href="../">← Accueil du studio</a>\n'
+            '        <a class="ghost studio-back hidden" id="studio-security-link" href="../securite/">Sécurité</a>'
         ),
         '    <main class="layout">': (
             '    <main class="layout">\n'
@@ -48,8 +50,11 @@ def studio_routestop(page: str) -> str:
         '<section id="setup-panel" class="panel">': '<section id="setup-panel" class="panel hidden" hidden>',
         '<section id="auth-panel" class="panel">': '<section id="auth-panel" class="panel hidden" hidden>',
         'src="./config.js"': 'src="../admin/config.js"',
-        'src="./vendor/supabase-js-2.105.1.js"': 'src="../admin/vendor/supabase-js-2.105.1.js"',
-        './app-v2.js?v=20261124-source-recovery': './app-v2.js?v=20261126-studio',
+        'src="./vendor/supabase-js-2.105.1.js"></script>': (
+            'src="../admin/vendor/supabase-js-2.105.1.js"></script>\n'
+            '    <script src="../session.js?v=20261126-security"></script>'
+        ),
+        './app-v2.js?v=20261124-source-recovery': './app-v2.js?v=20261126-security',
     }
     for original, studio in additions.items():
         if page.count(original) != 1:
@@ -82,6 +87,7 @@ def main() -> None:
         f"\n{path}\n  Content-Security-Policy: {policy}\n"
         for paths, policy in (
             (("/", "/index.html", "/podlegacy", "/podlegacy/*"), STUDIO_CSP),
+            (("/securite", "/securite/*"), SECURITY_CSP),
             (("/routestop", "/routestop/*"), ROUTESTOP_CSP),
         )
         for path in paths

@@ -206,12 +206,16 @@
       setText('config-state', 'Renseigne les identifiants publics Supabase pour continuer.');
       return false;
     }
+    if (studioEntry) {
+      client = window.StudioAdmin?.client ?? null;
+      return Boolean(client);
+    }
     if (!window.supabase?.createClient) {
       setText('config-state', 'Le client Supabase local n’a pas pu être chargé.');
       return false;
     }
     client = window.supabase.createClient(config.url, config.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: !studioEntry },
+      auth: { persistSession: true, autoRefreshToken: true },
     });
     setText('config-state', 'Configuration prête.');
     return true;
@@ -382,10 +386,26 @@
     setText('admin-state', email || 'Non connecté');
     $('admin-state').className = session ? 'pill success' : 'pill muted';
     setHidden('app-shell', true);
+    setHidden('studio-security-link', true);
     setHidden('denied-panel', true);
     setHidden('auth-panel', studioEntry || !!session);
     setHidden('setup-panel', studioEntry || !!session || readConfig().managed);
     if (!client || !session) return;
+
+    if (studioEntry) {
+      try {
+        const needsMfa = await window.StudioAdmin.requiresMfa();
+        if (leavingStudioRoute || session?.user.id !== userId) return;
+        if (needsMfa) {
+          leavingStudioRoute = true;
+          window.location.replace('../?ouvrir=routestop');
+          return;
+        }
+      } catch {
+        if (!leavingStudioRoute) showStudioRouteStatus('Impossible de vérifier la connexion. Recharge la page.');
+        return;
+      }
+    }
 
     const { data, error } = await client.rpc('is_admin');
     if (studioEntry && (leavingStudioRoute || session?.user.id !== userId)) return;
@@ -404,6 +424,7 @@
     }
 
     setHidden('studio-route-status', true);
+    setHidden('studio-security-link', false);
     setHidden('app-shell', false);
     subscribeRealtime();
     startActivePoll();

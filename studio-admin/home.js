@@ -2,6 +2,8 @@
   const route = document.querySelector("[data-route]");
   const pod = document.querySelector("[data-pod]");
   const body = document.body;
+  const requestedRoute = window.location.origin === "https://admin.cachiappsstudio.fr" &&
+    new URLSearchParams(window.location.search).get("ouvrir") === "routestop";
   const seenKey = "cachi-studio:apps-entered";
   let seen = false;
   try {
@@ -13,6 +15,10 @@
   window.StudioAdmin.mount({
     home: true,
     onAccess(access) {
+      if (requestedRoute && access?.routeStop) {
+        window.location.replace("./routestop/");
+        return;
+      }
       route.hidden = !access?.routeStop;
       pod.hidden = !access?.podLegacy;
       body.classList.toggle("studio-signed-in", Boolean(access));

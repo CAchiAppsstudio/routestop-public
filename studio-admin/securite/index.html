@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#ffffff">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Sécurité · CachiAppsStudio</title>
+  <link rel="icon" type="image/png" href="../assets/cachi-appsstudio-logo-928a21d052bb.png">
+  <link rel="stylesheet" href="../style.css?v=20261126-security">
+  <script defer src="/admin/config.js"></script>
+  <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
+  <script defer src="../session.js?v=20261126-security"></script>
+  <script defer src="./security.js"></script>
+</head>
+<body class="security-page">
+  <a class="skip" href="#main">Aller au contenu</a>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a class="brand" href="../" aria-label="Accueil CachiAppsStudio">
+        <span class="brand-image"><img src="../assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194"></span>
+        <span>CachiAppsStudio</span>
+      </a>
+      <div class="topbar-actions">
+        <button type="button" class="quiet-button" data-sign-out hidden>Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+  <main class="shell" id="main" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Navigation"><a href="../">← Accueil du studio</a></nav>
+    <h1>Sécurité</h1>
+    <section class="security-login" data-gate aria-labelledby="login-title" hidden>
+      <h2 id="login-title">Connexion</h2>
+      <p class="access-status" role="status" data-access-status></p>
+      <div class="access-actions">
+        <a class="button" href="https://routestop.fr/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
+        <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
+      </div>
+      <form class="form signin-form" method="post" data-login hidden>
+        <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
+        <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="button" type="submit">Se connecter <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+    <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
+    <p class="message warning" role="alert" data-session-error hidden></p>
+    <div class="security-grid" data-workspace hidden>
+      <section class="security-section" aria-labelledby="factor-title">
+        <h2 id="factor-title">Double authentification</h2>
+        <p class="access-status" role="status" data-factor-status></p>
+        <button class="button secondary" type="button" data-start-factor hidden>Configurer le code</button>
+        <div class="security-setup" data-factor-setup hidden>
+          <p class="helper">Scanne ce QR code avec ton application d’authentification, puis saisis le code affiché.</p>
+          <img data-factor-qr alt="QR code de configuration" width="184" height="184" hidden>
+          <details class="security-key">
+            <summary>Saisir la clé manuellement</summary>
+            <code data-factor-key></code>
+          </details>
+          <form class="form" method="post" data-enroll-factor>
+            <label>Code à six chiffres<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+            <div class="security-actions">
+              <button class="button" type="submit">Activer</button>
+              <button class="quiet-button" type="button" data-cancel-factor>Annuler</button>
+            </div>
+          </form>
+        </div>
+        <p class="message" role="status" data-factor-message hidden></p>
+      </section>
+      <section class="security-section" aria-labelledby="password-title">
+        <h2 id="password-title">Mot de passe</h2>
+        <form class="form" method="post" data-change-password>
+          <label>Mot de passe actuel<input type="password" name="current" autocomplete="current-password" required></label>
+          <label>Nouveau mot de passe<input type="password" name="next" autocomplete="new-password" required></label>
+          <label>Confirmer le nouveau mot de passe<input type="password" name="confirm" autocomplete="new-password" required></label>
+          <label data-password-nonce hidden>Code reçu par e-mail<input name="nonce" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" maxlength="10" disabled></label>
+          <button class="button" type="submit">Changer le mot de passe</button>
+          <p class="message" role="status" data-password-message hidden></p>
+        </form>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

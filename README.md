@@ -31,6 +31,11 @@ données. Le [schéma PodLegacy](.github/studio-admin/0001_podlegacy.sql) est
 appliqué via les migrations Supabase. Les habilitations et les relevés
 sont conservés dans Supabase.
 
+La rubrique `/securite/` permet à chaque administrateur de changer son mot de
+passe et de configurer une application d’authentification. Pendant l’essai, le
+portail demande le code aux comptes qui l’ont configuré. La validation de
+RouteStop et de PodLegacy précède l’exigence du deuxième facteur sur les API.
+
 ## Collecte automatique des services OSM
 
 - Le workflow `.github/workflows/osm-centre.yml` tourne sur un serveur
