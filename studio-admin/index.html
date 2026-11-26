@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#131015">
+  <meta name="theme-color" content="#ffffff">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>CachiAppsStudio · Administration</title>
   <link rel="icon" type="image/png" href="./assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="./style.css?v=20261126-studio">
+  <link rel="preload" as="image" href="./identity/brush-symbol.png" fetchpriority="high">
+  <link rel="stylesheet" href="./style.css?v=20261126-ink">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
   <script defer src="./session.js?v=20261126"></script>
@@ -20,8 +21,7 @@
   <header class="topbar">
     <div class="shell topbar-inner">
       <a class="brand" href="./" aria-label="Accueil CachiAppsStudio">
-        <span class="brand-image"><img src="./assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194"></span>
-        <span>Studio</span>
+        <span>CachiAppsStudio</span>
       </a>
       <div class="topbar-actions">
         <span>Administration</span>
@@ -30,19 +30,60 @@
     </div>
   </header>
   <main class="shell studio-layout" id="main" tabindex="-1">
-    <div class="studio-identity">
-      <div class="signature" aria-hidden="true">
-        <span class="signature-orbit orbit-outer"></span>
-        <span class="signature-orbit orbit-inner"></span>
-        <div class="signature-disc">
-          <img src="./assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194" fetchpriority="high">
-        </div>
-        <div class="signature-pixels">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-      </div>
-      <h1 class="studio-title" aria-label="CachiAppsStudio">CachiApps<span>Studio</span></h1>
-    </div>
+    <h1 class="studio-identity">
+      <svg class="ink-signature" viewBox="0 0 220 194" role="img" aria-labelledby="studio-signature-title">
+        <title id="studio-signature-title">CachiAppsStudio</title>
+        <defs>
+          <clipPath id="ink-brush-bounds">
+            <path d="M18 0H160V32L145 42L136 60L112 95L119 102L129 106L135 100L146 105V133L114 142H18Z"/>
+          </clipPath>
+          <clipPath id="ink-wordmark-bounds">
+            <rect y="142" width="220" height="52"/>
+          </clipPath>
+          <mask id="ink-reveal" x="0" y="0" width="220" height="194" maskUnits="userSpaceOnUse">
+            <path class="ink-brush" clip-path="url(#ink-brush-bounds)" pathLength="1"
+              d="M150 37C127 9 92 -4 63 20C39 37 30 55 34 77C33 100 55 118 78 126C103 134 126 124 139 105"
+              fill="none" stroke="white" stroke-width="30" stroke-linecap="round"/>
+            <g class="ink-pixels" fill="white">
+              <g>
+                <rect x="145" y="33" width="10" height="8"/>
+                <rect x="149" y="41" width="10" height="9"/>
+                <rect x="152" y="49" width="10" height="10"/>
+                <rect x="149" y="57" width="11" height="9"/>
+              </g>
+              <g>
+                <rect x="155" y="64" width="11" height="10"/>
+                <rect x="146" y="71" width="11" height="10"/>
+                <rect x="157" y="70" width="14" height="12"/>
+                <rect x="170" y="74" width="10" height="10"/>
+                <rect x="135" y="79" width="12" height="13"/>
+              </g>
+              <g>
+                <rect x="147" y="80" width="16" height="15"/>
+                <rect x="163" y="87" width="17" height="17"/>
+                <rect x="136" y="89" width="15" height="15"/>
+                <rect x="146" y="97" width="19" height="17"/>
+              </g>
+              <g>
+                <rect x="123" y="97" width="12" height="12"/>
+                <rect x="114" y="103" width="11" height="11"/>
+                <rect x="106" y="110" width="11" height="8"/>
+                <rect x="134" y="108" width="18" height="12"/>
+                <rect x="147" y="112" width="12" height="8"/>
+              </g>
+            </g>
+            <path class="ink-phone" pathLength="1" d="M167 59H183Q195 59 195 71V104Q195 116 183 116H164"
+              fill="none" stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect class="ink-wordmark" y="142" width="220" height="52" fill="white"/>
+            <rect class="ink-complete" width="220" height="194" fill="white"/>
+          </mask>
+        </defs>
+        <g mask="url(#ink-reveal)">
+          <image href="./identity/brush-symbol.png" x="23" y="2" width="178" height="140"/>
+          <image href="./assets/cachi-appsstudio-logo-928a21d052bb.png" width="220" height="194" clip-path="url(#ink-wordmark-bounds)"/>
+        </g>
+      </svg>
+    </h1>
     <div class="studio-interaction">
       <section class="access-panel" data-gate aria-labelledby="login-title">
         <h2 id="login-title">Connexion</h2>
