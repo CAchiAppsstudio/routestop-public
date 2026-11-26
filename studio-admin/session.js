@@ -43,8 +43,7 @@
 
     function showSignedOut() {
       render({
-        message: hosted ? "Connecte-toi avec ton compte administrateur RouteStop." :
-          "Connecte-toi avec ton compte administrateur RouteStop, puis reviens ici.",
+        message: hosted ? "" : "Connecte-toi avec ton compte administrateur RouteStop, puis reviens ici.",
         canConnect: true,
         canRetry: !hosted,
       });
