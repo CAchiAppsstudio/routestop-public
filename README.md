@@ -35,6 +35,9 @@ La rubrique `/securite/` permet à chaque administrateur de configurer son
 application d’authentification. L’accès aux deux espaces et le changement
 de mot de passe demandent une session vérifiée par code. Les comptes déjà
 habilités peuvent configurer leur premier code dans cette rubrique.
+Une session déjà vérifiée peut y ajouter Mots de passe Apple. Le portail
+présélectionne cette application aux connexions suivantes et laisse les
+autres codes vérifiés disponibles dans la liste.
 
 ## Collecte automatique des services OSM
 

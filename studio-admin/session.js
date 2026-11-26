@@ -8,6 +8,13 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   }) : null;
 
+  const appleFactorName = "Mots de passe Apple";
+
+  function isAppleFactor(factor) {
+    const name = factor.friendly_name;
+    return name === appleFactorName || Boolean(name?.startsWith(appleFactorName + " "));
+  }
+
   async function mfaLevels() {
     const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
     if (error) throw error;
@@ -101,8 +108,10 @@
       if (factors.length) {
         const previous = mfa.factor.value;
         mfa.factor.replaceChildren(...factors.map((factor, index) =>
-          new Option(factor.friendly_name || "Application " + (index + 1), factor.id)));
-        if (factors.some(factor => factor.id === previous)) mfa.factor.value = previous;
+          new Option(isAppleFactor(factor) ? appleFactorName :
+            factor.friendly_name || "Application " + (index + 1), factor.id)));
+        mfa.factor.value = factors.find(factor => factor.id === previous)?.id ??
+          factors.find(isAppleFactor)?.id ?? factors[0].id;
         mfa.factorLabel.hidden = factors.length < 2;
       } else {
         mfa.code.value = "";
@@ -238,6 +247,11 @@
       }
     });
 
+    mfa.factor.addEventListener("change", () => {
+      mfa.code.value = "";
+      showWarning();
+    });
+
     mfa.form.addEventListener("submit", async event => {
       event.preventDefault();
       if (mfa.form.hidden || mfa.button.disabled) return;
@@ -317,5 +331,5 @@
     });
   }
 
-  window.StudioAdmin = { client, mount, mfaLevels, confirmPassword };
+  window.StudioAdmin = { client, mount, mfaLevels, confirmPassword, appleFactorName, isAppleFactor };
 })();

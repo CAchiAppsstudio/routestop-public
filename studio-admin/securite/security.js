@@ -1,11 +1,13 @@
 (() => {
-  const { client, mount, confirmPassword } = window.StudioAdmin;
+  const { client, mount, confirmPassword, appleFactorName, isAppleFactor } = window.StudioAdmin;
   const select = selector => document.querySelector(selector);
   const factorName = "CachiAppsStudio";
   const setup = select("[data-factor-setup]");
   const factorStatus = select("[data-factor-status]");
   const factorMessage = select("[data-factor-message]");
   const start = select("[data-start-factor]");
+  const instructions = select("[data-factor-instructions]");
+  const genericInstructions = instructions.textContent;
   const qr = select("[data-factor-qr]");
   const manualKey = select("[data-factor-key]");
   const enrollmentForm = select("[data-enroll-factor]");
@@ -19,7 +21,7 @@
   const nonce = passwordForm.elements.namedItem("nonce");
   let account = null;
   let operation = null;
-  let factorId = null;
+  let enrollment = null;
 
   function feedback(target, text = "", level = "") {
     target.textContent = text;
@@ -45,8 +47,9 @@
   }
 
   function clearEnrollment() {
-    factorId = null;
+    enrollment = null;
     setup.hidden = true;
+    instructions.textContent = genericInstructions;
     qr.hidden = true;
     qr.removeAttribute("src");
     manualKey.textContent = "";
@@ -69,8 +72,11 @@
 
   function showFactorState(factors) {
     const configured = factors.totp.length > 0;
-    factorStatus.textContent = configured ? "Activée" : "À configurer";
-    start.hidden = configured || Boolean(factorId);
+    const appleConfigured = factors.totp.some(isAppleFactor);
+    factorStatus.textContent = appleConfigured ? "Mots de passe Apple configuré" :
+      configured ? "Activée" : "À configurer";
+    start.textContent = configured ? "Ajouter Mots de passe Apple" : "Configurer le code";
+    start.hidden = Boolean(enrollment) || appleConfigured || (configured && account.enrollmentOnly);
   }
 
   async function refreshFactors(expected) {
@@ -92,14 +98,16 @@
     try {
       const factors = await listFactors();
       if (operation !== request) return;
-      if (factors.totp.length) {
+      const apple = factors.totp.length > 0;
+      if (factors.totp.some(isAppleFactor) || (apple && request.account.enrollmentOnly)) {
         showFactorState(factors);
         return;
       }
-      const friendlyName = factors.all.some(factor => factor.friendly_name === factorName)
-        ? factorName + " " + crypto.randomUUID().slice(0, 8) : factorName;
+      const name = apple ? appleFactorName : factorName;
+      const friendlyName = factors.all.some(factor => factor.friendly_name === name)
+        ? name + " " + crypto.randomUUID().slice(0, 8) : name;
       const { data, error } = await client.auth.mfa.enroll({
-        factorType: "totp", friendlyName, issuer: factorName,
+        factorType: "totp", friendlyName, issuer: apple ? "admin.cachiappsstudio.fr" : factorName,
       });
       if (operation !== request) return;
       if (error) throw error;
@@ -107,7 +115,10 @@
       if (!/^data:image\/svg\+xml;(utf-8|base64),/i.test(image) || !secret) {
         throw new Error("invalid_enrollment");
       }
-      factorId = data.id;
+      enrollment = { id: data.id, apple };
+      instructions.textContent = apple ?
+        "Scanne le QR code avec l’Appareil photo de ton iPhone. Dans Mots de passe, choisis la fiche admin.cachiappsstudio.fr, puis saisis ici le code qu’elle affiche." :
+        genericInstructions;
       qr.src = image;
       qr.hidden = false;
       manualKey.textContent = secret;
@@ -124,9 +135,10 @@
   enrollmentForm.addEventListener("submit", async event => {
     event.preventDefault();
     const code = enrollmentForm.elements.namedItem("code");
-    if (!factorId || !/^[0-9]{6}$/.test(code.value)) return;
+    if (!enrollment || !/^[0-9]{6}$/.test(code.value)) return;
     const request = begin();
     if (!request) return;
+    const { id: factorId, apple } = enrollment;
     const enteredCode = code.value;
     code.value = "";
     feedback(factorMessage);
@@ -135,8 +147,10 @@
       if (operation !== request) return;
       if (error) throw error;
       clearEnrollment();
-      factorStatus.textContent = "Activée";
-      feedback(factorMessage, "Double authentification activée.", "success");
+      feedback(factorMessage, apple ?
+        "Mots de passe Apple est prêt. Tu peux aussi utiliser ton autre application à la connexion." :
+        "Double authentification activée.", "success");
+      await refreshFactors(request.account);
     } catch {
       if (operation === request) {
         feedback(factorMessage, "Code refusé. Essaie avec le nouveau code de ton application.", "warning");
@@ -148,22 +162,29 @@
   });
 
   cancel.addEventListener("click", async () => {
-    if (!factorId) return;
+    if (!enrollment) return;
     const request = begin();
     if (!request) return;
-    const pendingId = factorId;
+    const pendingId = enrollment.id;
     clearEnrollment();
     feedback(factorMessage);
-    start.hidden = false;
     try {
-      const { error } = await client.auth.mfa.unenroll({ factorId: pendingId });
+      const factors = await listFactors();
       if (operation !== request) return;
-      if (error && error.code !== "mfa_factor_not_found") throw error;
-      start.focus();
+      showFactorState(factors);
+      if (factors.all.some(factor => factor.id === pendingId && factor.status === "unverified")) {
+        const { error } = await client.auth.mfa.unenroll({ factorId: pendingId });
+        if (operation !== request) return;
+        if (error && error.code !== "mfa_factor_not_found") throw error;
+      }
     } catch {
-      if (operation === request) feedback(factorMessage, "Configuration interrompue. Tu peux recommencer.", "warning");
+      if (operation === request) {
+        feedback(factorMessage, "Configuration interrompue. Tu peux recommencer.", "warning");
+        await refreshFactors(request.account);
+      }
     } finally {
       finish(request);
+      if (account === request.account && !start.hidden) start.focus();
     }
   });
 

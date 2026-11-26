@@ -12,8 +12,8 @@
   <link rel="stylesheet" href="../style.css?v=20261126-mfa">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="../session.js?v=20261126-mfa"></script>
-  <script defer src="./security.js?v=20261126-mfa"></script>
+  <script defer src="../session.js?v=20261126-apple-code"></script>
+  <script defer src="./security.js?v=20261126-apple-code"></script>
 </head>
 <body class="security-page">
   <a class="skip" href="#main">Aller au contenu</a>
@@ -52,7 +52,7 @@
         <p class="access-status" role="status" data-factor-status></p>
         <button class="button secondary" type="button" data-start-factor hidden>Configurer le code</button>
         <div class="security-setup" data-factor-setup hidden>
-          <p class="helper">Scanne ce QR code avec ton application d’authentification, puis saisis le code affiché.</p>
+          <p class="helper" data-factor-instructions>Scanne ce QR code avec ton application d’authentification, puis saisis le code affiché.</p>
           <img data-factor-qr alt="QR code de configuration" width="184" height="184" hidden>
           <details class="security-key">
             <summary>Saisir la clé manuellement</summary>
