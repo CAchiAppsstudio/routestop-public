@@ -1,6 +1,8 @@
 (() => {
+  const hosted = window.location.origin === "https://admin.cachiappsstudio.fr";
+  const sharesRouteStopSession = window.location.origin === "https://routestop.fr";
   const config = window.ROUTESTOP_SUPABASE;
-  const ready = config?.url === "https://ubvvtmrnczqgoiavijfp.supabase.co" &&
+  const ready = (hosted || sharesRouteStopSession) && config?.url === "https://ubvvtmrnczqgoiavijfp.supabase.co" &&
     config.anonKey && typeof window.supabase?.createClient === "function";
   const client = ready ? window.supabase.createClient(config.url, config.anonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
@@ -11,6 +13,8 @@
     const status = document.querySelector("[data-access-status]");
     const connect = document.querySelector("[data-connect]");
     const retry = document.querySelector("[data-refresh-access]");
+    const login = document.querySelector("[data-login]");
+    const signIn = login.querySelector('button[type="submit"]');
     const signOut = document.querySelector("[data-sign-out]");
     const warning = document.querySelector("[data-session-error]");
     const workspace = document.querySelector("[data-workspace]");
@@ -29,7 +33,9 @@
       gate.hidden = Boolean(granted);
       workspace.hidden = !granted;
       status.textContent = message;
-      connect.hidden = !canConnect;
+      connect.hidden = !canConnect || hosted;
+      login.hidden = !canConnect || !hosted;
+      if (login.hidden) login.reset();
       retry.hidden = !canRetry;
       signOut.hidden = !signedIn;
       onAccess(granted, previousId);
@@ -37,15 +43,19 @@
 
     function showSignedOut() {
       render({
-        message: "Connecte-toi avec ton compte administrateur RouteStop, puis reviens ici.",
+        message: hosted ? "Connecte-toi avec ton compte administrateur RouteStop." :
+          "Connecte-toi avec ton compte administrateur RouteStop, puis reviens ici.",
         canConnect: true,
-        canRetry: true,
+        canRetry: !hosted,
       });
     }
 
     async function refresh() {
       if (!client) {
-        render({ message: "La connexion au portail est indisponible. Actualise la page." });
+        const message = hosted || sharesRouteStopSession ?
+          "La connexion au portail est indisponible. Actualise la page." :
+          "Connecte-toi sur l’adresse officielle admin.cachiappsstudio.fr.";
+        render({ message });
         return;
       }
 
@@ -94,6 +104,35 @@
       clearTimeout(timer);
       timer = setTimeout(refresh, 0);
     }
+
+    login.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!hosted || !client || login.hidden || signIn.disabled) return;
+      const { email, password } = login.elements;
+      signIn.disabled = true;
+      showWarning();
+      status.textContent = "Connexion en cours…";
+      try {
+        const { error } = await client.auth.signInWithPassword({
+          email: email.value.trim(),
+          password: password.value,
+        });
+        if (error) {
+          showSignedOut();
+          showWarning(error.code === "invalid_credentials" ?
+            "Adresse e-mail ou mot de passe incorrect." : "Impossible de te connecter. Réessaie dans un instant.");
+          return;
+        }
+        login.reset();
+        scheduleRefresh();
+      } catch {
+        showSignedOut();
+        showWarning("Impossible de te connecter. Réessaie dans un instant.");
+      } finally {
+        password.value = "";
+        signIn.disabled = false;
+      }
+    });
 
     retry.addEventListener("click", refresh);
     signOut.addEventListener("click", async () => {
