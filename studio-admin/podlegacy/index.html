@@ -5,25 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#131015">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>PodLegacy · CachiAppsStudio</title>
-  <link rel="icon" type="image/png" href="/assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="../style.css?v=20261126">
+  <link rel="icon" type="image/png" href="../assets/cachi-appsstudio-logo-928a21d052bb.png">
+  <link rel="stylesheet" href="../style.css?v=20261126-studio">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
   <script defer src="../session.js?v=20261126"></script>
   <script defer src="./workspace.js?v=20261126"></script>
 </head>
-<body>
+<body class="pod-workspace">
   <a class="skip" href="#main">Aller au contenu</a>
   <header class="topbar">
     <div class="shell topbar-inner">
-      <a class="brand" href="../">
-        <span class="brand-image"><img src="/assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="52" height="42"></span>
-        <span>CachiAppsStudio <small>Administration</small></span>
+      <a class="brand" href="../" aria-label="Accueil CachiAppsStudio">
+        <span class="brand-image"><img src="../assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194"></span>
+        <span>CachiAppsStudio</span>
       </a>
       <div class="topbar-actions">
-        <button type="button" class="button" data-sign-out hidden>Se déconnecter</button>
+        <button type="button" class="quiet-button" data-sign-out hidden>Se déconnecter</button>
       </div>
     </div>
   </header>
@@ -33,16 +34,17 @@
       <img class="app-icon" src="../podlegacy-icon.png" alt="" width="80" height="80">
       <div><h1>PodLegacy</h1><p>Administration iPhone et Mac</p></div>
     </header>
-    <div class="panel access-panel" data-gate>
-      <p role="status" data-access-status>Vérification de la connexion…</p>
+    <div class="access-panel" data-gate>
+      <h2>Connexion</h2>
+      <p class="access-status" role="status" data-access-status>Vérification de la connexion…</p>
       <div class="access-actions">
         <a class="button" href="https://routestop.fr/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
         <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
       </div>
-      <form class="form" method="post" data-login hidden>
+      <form class="form signin-form" method="post" data-login hidden>
         <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
         <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
-        <button class="button" type="submit">Se connecter</button>
+        <button class="button" type="submit">Se connecter <span aria-hidden="true">→</span></button>
       </form>
       <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
     </div>

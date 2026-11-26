@@ -5,63 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#131015">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ubvvtmrnczqgoiavijfp.supabase.co; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <title>CachiAppsStudio · Administration</title>
-  <link rel="icon" type="image/png" href="/assets/cachi-appsstudio-logo-928a21d052bb.png">
-  <link rel="stylesheet" href="style.css?v=20261126">
+  <link rel="icon" type="image/png" href="./assets/cachi-appsstudio-logo-928a21d052bb.png">
+  <link rel="stylesheet" href="./style.css?v=20261126-studio">
   <script defer src="/admin/config.js"></script>
   <script defer src="/admin/vendor/supabase-js-2.105.1.js"></script>
-  <script defer src="session.js?v=20261126"></script>
+  <script defer src="./session.js?v=20261126"></script>
   <script defer src="./home.js?v=20261126"></script>
 </head>
-<body>
+<body class="studio-home">
   <a class="skip" href="#main">Aller au contenu</a>
   <header class="topbar">
     <div class="shell topbar-inner">
-      <a class="brand" href="./">
-        <span class="brand-image"><img src="/assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="52" height="42"></span>
-        <span>CachiAppsStudio <small>Administration</small></span>
+      <a class="brand" href="./" aria-label="Accueil CachiAppsStudio">
+        <span class="brand-image"><img src="./assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194"></span>
+        <span>Studio</span>
       </a>
       <div class="topbar-actions">
-        <button type="button" class="button" data-sign-out hidden>Se déconnecter</button>
+        <span>Administration</span>
+        <button type="button" class="quiet-button" data-sign-out hidden>Se déconnecter</button>
       </div>
     </div>
   </header>
-  <main class="shell" id="main" tabindex="-1">
-    <div class="intro">
-      <h1>Administration</h1>
-      <p>Choisis l’application que tu veux gérer.</p>
-    </div>
-    <div class="panel access-panel" data-gate>
-      <p role="status" data-access-status>Vérification de la connexion…</p>
-      <div class="access-actions">
-        <a class="button" href="https://routestop.fr/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
-        <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
+  <main class="shell studio-layout" id="main" tabindex="-1">
+    <div class="studio-identity">
+      <div class="signature" aria-hidden="true">
+        <span class="signature-orbit orbit-outer"></span>
+        <span class="signature-orbit orbit-inner"></span>
+        <div class="signature-disc">
+          <img src="./assets/cachi-appsstudio-logo-928a21d052bb.png" alt="" width="220" height="194" fetchpriority="high">
+        </div>
+        <div class="signature-pixels">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
       </div>
-      <form class="form" method="post" data-login hidden>
-        <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
-        <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
-        <button class="button" type="submit">Se connecter</button>
-      </form>
-      <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
+      <h1 class="studio-title" aria-label="CachiAppsStudio">CachiApps<span>Studio</span></h1>
     </div>
-    <p class="message warning" role="alert" data-session-error hidden></p>
-    <div class="application-grid" data-workspace hidden>
-      <section class="application-card routestop" data-route hidden>
-        <div class="app-heading">
-          <img class="app-icon" src="/assets/icon.png" alt="" width="80" height="80">
-          <h2>RouteStop</h2>
+    <div class="studio-interaction">
+      <section class="access-panel" data-gate aria-labelledby="login-title">
+        <h2 id="login-title">Connexion</h2>
+        <p class="access-status" role="status" data-access-status>Vérification de la connexion…</p>
+        <div class="access-actions">
+          <a class="button" href="https://routestop.fr/admin/" target="_blank" rel="noreferrer" data-connect hidden>Se connecter via RouteStop</a>
+          <button class="button secondary" type="button" data-refresh-access hidden>Vérifier ma connexion</button>
         </div>
-        <p>Aires et services, signalements et suivi de l’application.</p>
-        <a class="button" href="https://routestop.fr/admin/">Ouvrir RouteStop</a>
+        <form class="form signin-form" method="post" data-login hidden>
+          <label>Adresse e-mail<input type="email" name="email" autocomplete="username" required></label>
+          <label>Mot de passe<input type="password" name="password" autocomplete="current-password" required></label>
+          <button class="button" type="submit">Se connecter <span aria-hidden="true">→</span></button>
+        </form>
+        <noscript><p>Active JavaScript pour ouvrir l’administration.</p></noscript>
       </section>
-      <section class="application-card podlegacy" data-pod hidden>
-        <div class="app-heading">
-          <img class="app-icon" src="./podlegacy-icon.png" alt="" width="80" height="80">
-          <h2>PodLegacy</h2>
+      <p class="message warning access-error" role="alert" data-session-error hidden></p>
+      <section class="projects" data-workspace hidden aria-labelledby="projects-title">
+        <h2 id="projects-title">Applications</h2>
+        <div class="project-index">
+          <a class="project-row route-project" href="https://routestop.fr/admin/" data-route hidden>
+            <img class="project-icon" src="./assets/icon.png" alt="" width="58" height="58">
+            <div class="project-copy">
+              <h3>RouteStop</h3>
+              <p>Aires, services et signalements</p>
+            </div>
+            <span class="project-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="project-row pod-project" href="./podlegacy/" data-pod hidden>
+            <img class="project-icon" src="./podlegacy-icon.png" alt="" width="58" height="58">
+            <div class="project-copy">
+              <h3>PodLegacy</h3>
+              <p>Incidents, versions et téléchargements</p>
+            </div>
+            <span class="project-arrow" aria-hidden="true">→</span>
+          </a>
         </div>
-        <p>Incidents de lecture, versions iPhone et Mac, relevés de téléchargements.</p>
-        <a class="button" href="./podlegacy/">Ouvrir PodLegacy</a>
       </section>
     </div>
   </main>
