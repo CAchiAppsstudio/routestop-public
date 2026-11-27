@@ -100,6 +100,7 @@
   };
 
   let client = null;
+  let iphoneWidget = null;
   let session = null;
   let sessionSubscription;
   let sessionTimer;
@@ -217,7 +218,16 @@
     return true;
   }
 
-  function boot() {
+  async function boot() {
+    iphoneWidget = window.RouteStopIPhoneWidget?.controls({
+      element: $, client: () => client, currentUser: () => session?.user?.id
+    });
+    function receivePhoneRequest() {
+      if (!iphoneWidget?.receive(window.location.href)) return;
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    receivePhoneRequest();
+    window.addEventListener('hashchange', receivePhoneRequest);
     bindEvents();
     if (initClient()) observeSession();
   }
@@ -227,6 +237,7 @@
     const { data } = client.auth.onAuthStateChange((_event, nextSession) => {
       const previousUser = session?.user.id;
       session = nextSession;
+      if (previousUser && previousUser !== session?.user?.id) iphoneWidget?.reset();
       const request = ++sessionRevision;
       // Leave the auth callback before making further Supabase requests.
       window.clearTimeout(sessionTimer);

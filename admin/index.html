@@ -105,10 +105,21 @@
             <div><h2>Tableau de bord</h2><p id="admin-feedback" class="hint" role="status"></p></div>
             <div class="dashboard-tools">
               <button id="refresh-btn" class="ghost" type="button">↻ Recharger</button>
+              <button id="iphone-open" class="ghost" type="button" aria-controls="iphone-pair" aria-expanded="false">Autoriser mon iPhone</button>
               <button id="tools-btn" class="ghost" data-go-view="maintenance" type="button">Outils <span id="tools-alert"></span></button>
             </div>
           </div>
           <span id="live-state" class="hidden"><i></i>Suivi connecté</span>
+          <section id="iphone-pair" class="card hidden" aria-labelledby="iphone-title">
+            <h3 id="iphone-title">Widget privé des téléchargements</h3>
+            <label id="iphone-input-label" for="iphone-input">Depuis RouteStop Stats sur ton iPhone, partage la demande avec ton Mac. Ouvre le lien ou colle-le ici.</label>
+            <input id="iphone-input" type="text" autocomplete="off" spellcheck="false" placeholder="Lien de demande RouteStop" />
+            <p id="iphone-match" aria-live="polite"></p>
+            <p class="hint">Vérifie que le même repère apparaît dans RouteStop Stats sur ton iPhone. L’autorisation donne uniquement accès aux chiffres de téléchargement et à leurs dates ; elle remplace celle d’un précédent iPhone.</p>
+            <button id="iphone-approve" type="button" disabled>Autoriser mon iPhone</button>
+            <button id="iphone-close" type="button" class="ghost">Fermer</button>
+            <p id="iphone-status" class="hint" role="status"></p>
+          </section>
           <section id="home-view" class="view" aria-live="polite"></section>
 
           <dialog id="detail-drawer" class="detail-drawer" aria-labelledby="view-title">
@@ -161,6 +172,7 @@
     <script src="./vendor/supabase-js-2.105.1.js"></script>
     <script src="./area-review-data.js?v=20261027-aires"></script>
     <script src="./area-review.js?v=20261107-dashboard-actions"></script>
-  <script src="./app-v2.js?v=20261126-mfa"></script>
+  <script src="./iphone-widget.js?v=1"></script>
+  <script src="./app-v2.js?v=20261127-widget-pair"></script>
   </body>
 </html>
